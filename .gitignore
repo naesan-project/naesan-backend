@@ -35,3 +35,22 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Local project records ###
+/docs/
+/archive/
+/.omx/
+
+### Local environment and secrets ###
+.env
+.env.*
+!.env.example
+/src/main/resources/application-local.properties
+/src/main/resources/application-local.yml
+/src/main/resources/application-secret.properties
+/src/main/resources/application-secret.yml
+
+### Local logs and OS files ###
+*.log
+logs/
+.DS_Store
