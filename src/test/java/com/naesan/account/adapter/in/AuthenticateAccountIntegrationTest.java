@@ -77,6 +77,19 @@ class AuthenticateAccountIntegrationTest {
     }
 
     @Test
+    @DisplayName("PostgreSQL에 없는 이메일도 자격증명 오류로 거절한다")
+    void rejectsUnknownEmail() {
+        assertThatThrownBy(() -> authenticateAccountService.authenticate(
+                "unknown@example.com",
+                RAW_PASSWORD
+        )).isInstanceOfSatisfying(
+                AccountException.class,
+                exception -> assertThat(exception.code())
+                        .isEqualTo(AccountErrorCode.INVALID_CREDENTIALS)
+        );
+    }
+
+    @Test
     @DisplayName("PostgreSQL의 비활성 계정을 인증하지 않는다")
     void rejectsInactiveAccount() {
         registerAccountService.register(EMAIL, RAW_PASSWORD);

@@ -21,6 +21,8 @@ class AuthenticateAccountServiceTest {
     private static final String RAW_PASSWORD = "password1234";
     private static final PasswordHash PASSWORD_HASH =
             new PasswordHash("$2b$12$" + "a".repeat(53));
+    private static final PasswordHash MISSING_ACCOUNT_PASSWORD_HASH =
+            new PasswordHash("$2b$12$" + "b".repeat(53));
     private static final Instant CREATED_AT = Instant.parse("2026-07-17T00:00:00Z");
 
     @Test
@@ -28,9 +30,11 @@ class AuthenticateAccountServiceTest {
     void authenticatesActiveAccount() {
         Account account = account(AccountStatus.ACTIVE);
         FakeAccountRepository accountRepository = new FakeAccountRepository(account);
+        FakePasswordHasher passwordHasher = new FakePasswordHasher();
         AuthenticateAccountService service = new AuthenticateAccountService(
                 accountRepository,
-                new FakePasswordHasher()
+                passwordHasher,
+                MISSING_ACCOUNT_PASSWORD_HASH
         );
 
         Account authenticatedAccount = service.authenticate(
@@ -39,17 +43,23 @@ class AuthenticateAccountServiceTest {
         );
 
         assertThat(authenticatedAccount).isEqualTo(account);
+        assertThat(passwordHasher.matchedPasswordHash()).isEqualTo(PASSWORD_HASH);
+        assertThat(passwordHasher.matchCount()).isOne();
     }
 
     @Test
-    @DisplayName("존재하지 않는 이메일은 자격증명 오류로 거절한다")
+    @DisplayName("미등록 이메일도 비교용 hash와 비교한 뒤 자격증명 오류로 거절한다")
     void rejectsUnknownEmail() {
+        FakePasswordHasher passwordHasher = new FakePasswordHasher();
         AuthenticateAccountService service = new AuthenticateAccountService(
                 new FakeAccountRepository(null),
-                new FakePasswordHasher()
+                passwordHasher,
+                MISSING_ACCOUNT_PASSWORD_HASH
         );
 
         assertInvalidCredentials(() -> service.authenticate("unknown@example.com", RAW_PASSWORD));
+        assertThat(passwordHasher.matchedPasswordHash()).isEqualTo(MISSING_ACCOUNT_PASSWORD_HASH);
+        assertThat(passwordHasher.matchCount()).isOne();
     }
 
     @Test
@@ -57,7 +67,8 @@ class AuthenticateAccountServiceTest {
     void rejectsWrongPassword() {
         AuthenticateAccountService service = new AuthenticateAccountService(
                 new FakeAccountRepository(account(AccountStatus.ACTIVE)),
-                new FakePasswordHasher()
+                new FakePasswordHasher(),
+                MISSING_ACCOUNT_PASSWORD_HASH
         );
 
         assertInvalidCredentials(() -> service.authenticate(
@@ -71,7 +82,8 @@ class AuthenticateAccountServiceTest {
     void rejectsInactiveAccount() {
         AuthenticateAccountService service = new AuthenticateAccountService(
                 new FakeAccountRepository(account(AccountStatus.DELETION_PENDING)),
-                new FakePasswordHasher()
+                new FakePasswordHasher(),
+                MISSING_ACCOUNT_PASSWORD_HASH
         );
 
         assertInvalidCredentials(() -> service.authenticate("user@example.com", RAW_PASSWORD));
@@ -120,6 +132,8 @@ class AuthenticateAccountServiceTest {
     }
 
     private static final class FakePasswordHasher implements PasswordHasher {
+        private PasswordHash matchedPasswordHash;
+        private int matchCount;
 
         @Override
         public PasswordHash hash(String rawPassword) {
@@ -128,7 +142,17 @@ class AuthenticateAccountServiceTest {
 
         @Override
         public boolean matches(String rawPassword, PasswordHash passwordHash) {
+            matchedPasswordHash = passwordHash;
+            matchCount++;
             return RAW_PASSWORD.equals(rawPassword) && PASSWORD_HASH.equals(passwordHash);
+        }
+
+        private PasswordHash matchedPasswordHash() {
+            return matchedPasswordHash;
+        }
+
+        private int matchCount() {
+            return matchCount;
         }
     }
 }
