@@ -8,6 +8,13 @@ public final class AccountException extends RuntimeException {
         this.code = code;
     }
 
+    public static AccountException emailAlreadyRegistered() {
+        return new AccountException(
+                AccountErrorCode.EMAIL_ALREADY_REGISTERED,
+                "이미 등록된 이메일입니다."
+        );
+    }
+
     public AccountErrorCode code() {
         return code;
     }

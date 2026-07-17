@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.util.Objects;
 import java.util.UUID;
 
+import org.springframework.transaction.annotation.Transactional;
+
 import com.naesan.account.application.port.out.AccountRepository;
 import com.naesan.account.application.port.out.PasswordHasher;
 import com.naesan.account.domain.Account;
@@ -11,7 +13,7 @@ import com.naesan.account.domain.Email;
 import com.naesan.account.domain.PasswordHash;
 import com.naesan.account.domain.PasswordPolicy;
 
-public final class RegisterAccountService {
+public class RegisterAccountService {
     private final AccountRepository accountRepository;
     private final PasswordHasher passwordHasher;
     private final Clock clock;
@@ -26,6 +28,7 @@ public final class RegisterAccountService {
         this.clock = Objects.requireNonNull(clock);
     }
 
+    @Transactional
     public Account register(String emailValue, String rawPassword) {
         Email email = new Email(emailValue);
         PasswordPolicy.validate(rawPassword);
@@ -40,10 +43,7 @@ public final class RegisterAccountService {
 
     private void validateEmailAvailable(Email email) {
         if (accountRepository.existsByEmail(email)) {
-            throw new AccountException(
-                    AccountErrorCode.EMAIL_ALREADY_REGISTERED,
-                    "이미 등록된 이메일입니다."
-            );
+            throw AccountException.emailAlreadyRegistered();
         }
     }
 }
