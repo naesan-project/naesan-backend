@@ -15,6 +15,13 @@ public final class AccountException extends RuntimeException {
         );
     }
 
+    public static AccountException invalidCredentials() {
+        return new AccountException(
+                AccountErrorCode.INVALID_CREDENTIALS,
+                "이메일 또는 비밀번호가 올바르지 않습니다."
+        );
+    }
+
     public AccountErrorCode code() {
         return code;
     }

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,11 @@ class RegisterAccountServiceTest {
         }
 
         @Override
+        public Optional<Account> findByEmail(Email email) {
+            return Optional.empty();
+        }
+
+        @Override
         public void save(Account account) {
             savedAccount = account;
         }
@@ -111,6 +117,11 @@ class RegisterAccountServiceTest {
         public PasswordHash hash(String rawPassword) {
             this.rawPassword = rawPassword;
             return PASSWORD_HASH;
+        }
+
+        @Override
+        public boolean matches(String rawPassword, PasswordHash passwordHash) {
+            return false;
         }
 
         String rawPassword() {

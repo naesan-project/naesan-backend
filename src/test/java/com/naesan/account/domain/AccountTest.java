@@ -29,6 +29,28 @@ class AccountTest {
     }
 
     @Test
+    @DisplayName("저장된 계정 상태를 복원하고 ACTIVE 계정만 인증을 허용한다")
+    void restoresAccountStatus() {
+        Account activeAccount = Account.restore(
+                ACCOUNT_ID,
+                EMAIL,
+                PASSWORD_HASH,
+                AccountStatus.ACTIVE,
+                CREATED_AT
+        );
+        Account inactiveAccount = Account.restore(
+                UUID.randomUUID(),
+                EMAIL,
+                PASSWORD_HASH,
+                AccountStatus.DELETION_PENDING,
+                CREATED_AT
+        );
+
+        assertThat(activeAccount.canAuthenticate()).isTrue();
+        assertThat(inactiveAccount.canAuthenticate()).isFalse();
+    }
+
+    @Test
     @DisplayName("필수 값이 null이면 계정을 생성하지 않는다")
     void rejectsNullRequiredValue() {
         assertThatThrownBy(() -> Account.create(null, EMAIL, PASSWORD_HASH, CREATED_AT))
@@ -39,6 +61,13 @@ class AccountTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> Account.create(ACCOUNT_ID, EMAIL, PASSWORD_HASH, null))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Account.restore(
+                ACCOUNT_ID,
+                EMAIL,
+                PASSWORD_HASH,
+                null,
+                CREATED_AT
+        )).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

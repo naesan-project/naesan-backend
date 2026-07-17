@@ -10,23 +10,53 @@ public final class Account {
     private final AccountStatus status;
     private final Instant createdAt;
 
-    private Account(UUID id, Email email, PasswordHash passwordHash, Instant createdAt) {
-        validate(id, email, passwordHash, createdAt);
+    private Account(
+            UUID id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Instant createdAt
+    ) {
+        validate(id, email, passwordHash, status, createdAt);
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
-        this.status = AccountStatus.ACTIVE;
+        this.status = status;
         this.createdAt = createdAt;
     }
 
-    private static void validate(UUID id, Email email, PasswordHash passwordHash, Instant createdAt) {
-        if (id == null || email == null || passwordHash == null || createdAt == null) {
+    private static void validate(
+            UUID id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Instant createdAt
+    ) {
+        if (id == null
+                || email == null
+                || passwordHash == null
+                || status == null
+                || createdAt == null) {
             throw new IllegalArgumentException("계정의 필수 값은 null일 수 없습니다.");
         }
     }
 
     public static Account create(UUID id, Email email, PasswordHash passwordHash, Instant createdAt) {
-        return new Account(id, email, passwordHash, createdAt);
+        return new Account(id, email, passwordHash, AccountStatus.ACTIVE, createdAt);
+    }
+
+    public static Account restore(
+            UUID id,
+            Email email,
+            PasswordHash passwordHash,
+            AccountStatus status,
+            Instant createdAt
+    ) {
+        return new Account(id, email, passwordHash, status, createdAt);
+    }
+
+    public boolean canAuthenticate() {
+        return status == AccountStatus.ACTIVE;
     }
 
     public UUID id() {
