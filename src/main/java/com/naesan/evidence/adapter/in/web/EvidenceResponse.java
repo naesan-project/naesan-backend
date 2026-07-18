@@ -8,7 +8,7 @@ import java.util.UUID;
 import com.naesan.evidence.domain.EvidenceMetadata;
 import com.naesan.evidence.domain.PurchaseEvidence;
 
-public record EvidenceDraftResponse(
+public record EvidenceResponse(
         UUID id,
         String state,
         String merchantName,
@@ -20,9 +20,9 @@ public record EvidenceDraftResponse(
         Instant createdAt
 ) {
 
-    public static EvidenceDraftResponse from(PurchaseEvidence evidence) {
+    public static EvidenceResponse from(PurchaseEvidence evidence) {
         EvidenceMetadata metadata = evidence.metadata();
-        return new EvidenceDraftResponse(
+        return new EvidenceResponse(
                 evidence.id(),
                 evidence.state().name(),
                 metadata.merchantName(),

@@ -15,11 +15,14 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
+import com.naesan.evidence.application.UpdateEvidenceMetadataCommand;
+import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.domain.PurchaseEvidence;
 import com.naesan.evidence.domain.EvidenceFile;
 import com.naesan.security.AuthenticatedAccount;
@@ -29,17 +32,20 @@ import com.naesan.security.AuthenticatedAccount;
 public class EvidenceApiController {
     private final CreateEvidenceDraftService createEvidenceDraftService;
     private final AttachEvidenceFileService attachEvidenceFileService;
+    private final UpdateEvidenceMetadataService updateEvidenceMetadataService;
 
     public EvidenceApiController(
             CreateEvidenceDraftService createEvidenceDraftService,
-            AttachEvidenceFileService attachEvidenceFileService
+            AttachEvidenceFileService attachEvidenceFileService,
+            UpdateEvidenceMetadataService updateEvidenceMetadataService
     ) {
         this.createEvidenceDraftService = createEvidenceDraftService;
         this.attachEvidenceFileService = attachEvidenceFileService;
+        this.updateEvidenceMetadataService = updateEvidenceMetadataService;
     }
 
     @PostMapping
-    public ResponseEntity<EvidenceDraftResponse> createDraft(
+    public ResponseEntity<EvidenceResponse> createDraft(
             @AuthenticationPrincipal AuthenticatedAccount account,
             @Valid @RequestBody CreateEvidenceDraftRequest request
     ) {
@@ -56,7 +62,28 @@ public class EvidenceApiController {
         );
         URI location = URI.create("/api/evidence/" + evidence.id());
         return ResponseEntity.created(location)
-                .body(EvidenceDraftResponse.from(evidence));
+                .body(EvidenceResponse.from(evidence));
+    }
+
+    @PutMapping("/{evidenceId}/metadata")
+    public EvidenceResponse updateMetadata(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID evidenceId,
+            @Valid @RequestBody UpdateEvidenceMetadataRequest request
+    ) {
+        PurchaseEvidence evidence = updateEvidenceMetadataService.update(
+                new UpdateEvidenceMetadataCommand(
+                        account.id(),
+                        evidenceId,
+                        request.merchantName(),
+                        request.productName(),
+                        request.serialNumber(),
+                        request.purchasedAt(),
+                        request.amount(),
+                        request.currency()
+                )
+        );
+        return EvidenceResponse.from(evidence);
     }
 
     @PostMapping(
