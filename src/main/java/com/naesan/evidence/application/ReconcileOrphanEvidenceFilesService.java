@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
 import com.naesan.evidence.application.port.out.FileStorage;
@@ -43,7 +44,7 @@ public class ReconcileOrphanEvidenceFilesService {
         int deleted = 0;
         int failed = 0;
 
-        for (StoredObjectMetadata storedObject : fileStorage.listPermanentObjects()) {
+        for (StoredObjectMetadata storedObject : storedObjects()) {
             scanned++;
             if (!isOrphan(storedObject, referencedKeys, orphanCutoff)) {
                 continue;
@@ -56,6 +57,13 @@ public class ReconcileOrphanEvidenceFilesService {
             }
         }
         return new OrphanReconciliationResult(scanned, deleted, failed);
+    }
+
+    private Iterable<StoredObjectMetadata> storedObjects() {
+        return Stream.concat(
+                fileStorage.listTemporaryObjects().stream(),
+                fileStorage.listPermanentObjects().stream()
+        ).toList();
     }
 
     private boolean isOrphan(

@@ -221,6 +221,11 @@ class ConcurrentConfirmEvidenceIntegrationTest {
         }
 
         @Override
+        public List<StoredObjectMetadata> listTemporaryObjects() {
+            return delegate.listTemporaryObjects();
+        }
+
+        @Override
         public void delete(StorageKey key) {
             delegate.delete(key);
         }

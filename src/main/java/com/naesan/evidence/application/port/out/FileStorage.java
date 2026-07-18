@@ -13,6 +13,8 @@ public interface FileStorage {
 
     StorageKey promote(StorageKey temporaryKey);
 
+    List<StoredObjectMetadata> listTemporaryObjects();
+
     List<StoredObjectMetadata> listPermanentObjects();
 
     void delete(StorageKey key);

@@ -40,9 +40,11 @@ class ReconcileOrphanEvidenceFilesServiceTest {
     @DisplayName("유예 시간이 지난 미참조 영구 파일만 삭제한다")
     void deletesOnlyOldUnreferencedPermanentObjects() throws Exception {
         LocalFileStorage fileStorage = new LocalFileStorage(rootDirectory);
+        StorageKey oldTemporaryOrphan = temporaryObject(fileStorage);
         StorageKey oldOrphan = permanentObject(fileStorage);
         StorageKey referencedObject = permanentObject(fileStorage);
         StorageKey recentOrphan = permanentObject(fileStorage);
+        setLastModifiedAt(oldTemporaryOrphan, NOW.minus(Duration.ofHours(2)));
         setLastModifiedAt(oldOrphan, NOW.minus(Duration.ofHours(2)));
         setLastModifiedAt(referencedObject, NOW.minus(Duration.ofHours(2)));
         setLastModifiedAt(recentOrphan, NOW.minus(Duration.ofMinutes(30)));
@@ -56,7 +58,9 @@ class ReconcileOrphanEvidenceFilesServiceTest {
 
         OrphanReconciliationResult result = service.reconcile();
 
-        assertThat(result).isEqualTo(new OrphanReconciliationResult(3, 1, 0));
+        assertThat(result).isEqualTo(new OrphanReconciliationResult(4, 2, 0));
+        assertThatThrownBy(() -> fileStorage.open(oldTemporaryOrphan))
+                .isInstanceOf(FileStorageException.class);
         assertThatThrownBy(() -> fileStorage.open(oldOrphan))
                 .isInstanceOf(FileStorageException.class);
         assertThat(fileStorage.open(referencedObject)).isNotNull();
@@ -64,10 +68,14 @@ class ReconcileOrphanEvidenceFilesServiceTest {
     }
 
     private StorageKey permanentObject(LocalFileStorage fileStorage) {
-        StorageKey temporaryKey = fileStorage.storeTemporary(
-                new ByteArrayInputStream(FILE_CONTENT)
-        );
-        return fileStorage.promote(temporaryKey);
+        StorageKey temporaryKey = temporaryObject(fileStorage);
+        StorageKey permanentKey = fileStorage.promote(temporaryKey);
+        fileStorage.delete(temporaryKey);
+        return permanentKey;
+    }
+
+    private StorageKey temporaryObject(LocalFileStorage fileStorage) {
+        return fileStorage.storeTemporary(new ByteArrayInputStream(FILE_CONTENT));
     }
 
     private void setLastModifiedAt(StorageKey key, Instant lastModifiedAt)

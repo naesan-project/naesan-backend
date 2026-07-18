@@ -89,36 +89,49 @@ public final class LocalFileStorage implements FileStorage {
     }
 
     @Override
+    public List<StoredObjectMetadata> listTemporaryObjects() {
+        return listObjects(TEMPORARY_DIRECTORY);
+    }
+
+    @Override
     public List<StoredObjectMetadata> listPermanentObjects() {
-        Path permanentDirectory = rootDirectory.resolve(PERMANENT_DIRECTORY);
-        if (Files.notExists(permanentDirectory)) {
+        return listObjects(PERMANENT_DIRECTORY);
+    }
+
+    private List<StoredObjectMetadata> listObjects(String directoryName) {
+        Path objectDirectory = rootDirectory.resolve(directoryName);
+        if (Files.notExists(objectDirectory)) {
             return List.of();
         }
 
-        try (var objectPaths = Files.list(permanentDirectory)) {
+        try (var objectPaths = Files.list(objectDirectory)) {
             return objectPaths
                     .filter(Files::isRegularFile)
-                    .map(this::storedObjectMetadata)
+                    .map(objectPath ->
+                            storedObjectMetadata(directoryName, objectPath))
                     .toList();
         } catch (IOException exception) {
             throw new FileStorageException(
-                    "영구 저장 파일 목록을 조회하지 못했습니다.",
+                    "저장 파일 목록을 조회하지 못했습니다.",
                     exception
             );
         }
     }
 
-    private StoredObjectMetadata storedObjectMetadata(Path objectPath) {
+    private StoredObjectMetadata storedObjectMetadata(
+            String directoryName,
+            Path objectPath
+    ) {
         try {
             StorageKey key = new StorageKey(
-                    PERMANENT_DIRECTORY + "/" + objectPath.getFileName()
+                    directoryName + "/" + objectPath.getFileName()
             );
             Instant lastModifiedAt = Files.getLastModifiedTime(objectPath)
                     .toInstant();
             return new StoredObjectMetadata(key, lastModifiedAt);
         } catch (IOException exception) {
             throw new FileStorageException(
-                    "영구 저장 파일 정보를 조회하지 못했습니다.",
+                    "저장 파일 정보를 조회하지 못했습니다.",
                     exception
             );
         }

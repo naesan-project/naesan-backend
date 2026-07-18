@@ -137,6 +137,11 @@ class DeleteEvidenceFileServiceTest {
         }
 
         @Override
+        public List<StoredObjectMetadata> listTemporaryObjects() {
+            return List.of();
+        }
+
+        @Override
         public List<StoredObjectMetadata> listPermanentObjects() {
             return List.of();
         }
