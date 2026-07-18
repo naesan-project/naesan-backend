@@ -21,10 +21,12 @@ import org.springframework.web.multipart.MultipartFile;
 import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
+import com.naesan.evidence.application.ConfirmEvidenceService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataCommand;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.domain.PurchaseEvidence;
 import com.naesan.evidence.domain.EvidenceFile;
+import com.naesan.evidence.domain.EvidenceSnapshot;
 import com.naesan.security.AuthenticatedAccount;
 
 @RestController
@@ -33,15 +35,18 @@ public class EvidenceApiController {
     private final CreateEvidenceDraftService createEvidenceDraftService;
     private final AttachEvidenceFileService attachEvidenceFileService;
     private final UpdateEvidenceMetadataService updateEvidenceMetadataService;
+    private final ConfirmEvidenceService confirmEvidenceService;
 
     public EvidenceApiController(
             CreateEvidenceDraftService createEvidenceDraftService,
             AttachEvidenceFileService attachEvidenceFileService,
-            UpdateEvidenceMetadataService updateEvidenceMetadataService
+            UpdateEvidenceMetadataService updateEvidenceMetadataService,
+            ConfirmEvidenceService confirmEvidenceService
     ) {
         this.createEvidenceDraftService = createEvidenceDraftService;
         this.attachEvidenceFileService = attachEvidenceFileService;
         this.updateEvidenceMetadataService = updateEvidenceMetadataService;
+        this.confirmEvidenceService = confirmEvidenceService;
     }
 
     @PostMapping
@@ -104,5 +109,17 @@ public class EvidenceApiController {
         URI location = URI.create("/api/evidence/" + evidenceId + "/file");
         return ResponseEntity.created(location)
                 .body(EvidenceFileResponse.from(evidenceFile));
+    }
+
+    @PostMapping("/{evidenceId}/confirm")
+    public EvidenceConfirmationResponse confirm(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID evidenceId
+    ) {
+        EvidenceSnapshot snapshot = confirmEvidenceService.confirm(
+                account.id(),
+                evidenceId
+        );
+        return EvidenceConfirmationResponse.from(snapshot);
     }
 }
