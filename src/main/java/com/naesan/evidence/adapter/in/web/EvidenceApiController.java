@@ -24,6 +24,7 @@ import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
+import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataCommand;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
@@ -37,6 +38,7 @@ import com.naesan.security.AuthenticatedAccount;
 public class EvidenceApiController {
     private final CreateEvidenceDraftService createEvidenceDraftService;
     private final ListEvidenceService listEvidenceService;
+    private final GetEvidenceDetailsService getEvidenceDetailsService;
     private final AttachEvidenceFileService attachEvidenceFileService;
     private final UpdateEvidenceMetadataService updateEvidenceMetadataService;
     private final ConfirmEvidenceService confirmEvidenceService;
@@ -44,12 +46,14 @@ public class EvidenceApiController {
     public EvidenceApiController(
             CreateEvidenceDraftService createEvidenceDraftService,
             ListEvidenceService listEvidenceService,
+            GetEvidenceDetailsService getEvidenceDetailsService,
             AttachEvidenceFileService attachEvidenceFileService,
             UpdateEvidenceMetadataService updateEvidenceMetadataService,
             ConfirmEvidenceService confirmEvidenceService
     ) {
         this.createEvidenceDraftService = createEvidenceDraftService;
         this.listEvidenceService = listEvidenceService;
+        this.getEvidenceDetailsService = getEvidenceDetailsService;
         this.attachEvidenceFileService = attachEvidenceFileService;
         this.updateEvidenceMetadataService = updateEvidenceMetadataService;
         this.confirmEvidenceService = confirmEvidenceService;
@@ -84,6 +88,16 @@ public class EvidenceApiController {
                 .stream()
                 .map(EvidenceResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/{evidenceId}")
+    public EvidenceDetailsResponse details(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID evidenceId
+    ) {
+        return EvidenceDetailsResponse.from(
+                getEvidenceDetailsService.get(account.id(), evidenceId)
+        );
     }
 
     @PutMapping("/{evidenceId}/metadata")

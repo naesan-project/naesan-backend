@@ -13,6 +13,7 @@ import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
 import com.naesan.evidence.application.EvidenceSnapshotCanonicalizer;
+import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
 import com.naesan.evidence.application.StoreTemporaryEvidenceFileService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
@@ -34,6 +35,17 @@ public class EvidenceApplicationConfiguration {
             PurchaseEvidenceRepository evidenceRepository
     ) {
         return new ListEvidenceService(evidenceRepository);
+    }
+
+    @Bean
+    GetEvidenceDetailsService getEvidenceDetailsService(
+            PurchaseEvidenceRepository evidenceRepository,
+            EvidenceFileRepository evidenceFileRepository
+    ) {
+        return new GetEvidenceDetailsService(
+                evidenceRepository,
+                evidenceFileRepository
+        );
     }
 
     @Bean
