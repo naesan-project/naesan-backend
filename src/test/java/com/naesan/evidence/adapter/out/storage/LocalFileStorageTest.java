@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import com.naesan.evidence.application.port.out.FileStorageException;
-import com.naesan.evidence.application.port.out.StorageKey;
+import com.naesan.evidence.domain.StorageKey;
 
 class LocalFileStorageTest {
     private static final byte[] FILE_CONTENT =

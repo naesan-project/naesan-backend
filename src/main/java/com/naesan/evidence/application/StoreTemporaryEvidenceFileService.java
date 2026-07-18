@@ -6,8 +6,8 @@ import java.io.PushbackInputStream;
 import java.util.Objects;
 
 import com.naesan.evidence.application.port.out.FileStorage;
-import com.naesan.evidence.application.port.out.StorageKey;
 import com.naesan.evidence.domain.EvidenceFileType;
+import com.naesan.evidence.domain.StorageKey;
 
 public final class StoreTemporaryEvidenceFileService {
     private final FileStorage fileStorage;

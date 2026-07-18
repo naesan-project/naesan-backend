@@ -1,4 +1,4 @@
-package com.naesan.evidence.application.port.out;
+package com.naesan.evidence.domain;
 
 public record StorageKey(String value) {
 

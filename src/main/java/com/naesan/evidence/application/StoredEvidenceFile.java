@@ -1,7 +1,7 @@
 package com.naesan.evidence.application;
 
-import com.naesan.evidence.application.port.out.StorageKey;
 import com.naesan.evidence.domain.EvidenceFileType;
+import com.naesan.evidence.domain.StorageKey;
 
 public record StoredEvidenceFile(
         StorageKey key,

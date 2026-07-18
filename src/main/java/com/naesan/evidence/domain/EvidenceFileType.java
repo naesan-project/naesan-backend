@@ -49,4 +49,8 @@ public enum EvidenceFileType {
         }
         return true;
     }
+
+    public String mediaType() {
+        return mediaType;
+    }
 }

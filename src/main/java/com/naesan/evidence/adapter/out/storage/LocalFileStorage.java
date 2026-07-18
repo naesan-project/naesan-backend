@@ -9,7 +9,7 @@ import java.util.UUID;
 
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.FileStorageException;
-import com.naesan.evidence.application.port.out.StorageKey;
+import com.naesan.evidence.domain.StorageKey;
 
 public final class LocalFileStorage implements FileStorage {
     private static final String TEMPORARY_DIRECTORY = "temporary";
