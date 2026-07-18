@@ -269,6 +269,11 @@ class IssuePassportTransactionIntegrationTest {
         public Optional<OutboxEvent> findByProofAnchorId(UUID proofAnchorId) {
             return delegate.findByProofAnchorId(proofAnchorId);
         }
+
+        @Override
+        public Optional<OutboxEvent> claimNextPending(String workerId) {
+            return delegate.claimNextPending(workerId);
+        }
     }
 
     static final class SynchronizingAnchorSaltGenerator implements AnchorSaltGenerator {

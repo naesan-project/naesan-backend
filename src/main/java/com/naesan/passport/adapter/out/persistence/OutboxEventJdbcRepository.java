@@ -52,6 +52,38 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_PROOF_ANCHOR_ID =
             SELECT_COLUMNS + " WHERE proof_anchor_id = ?";
+    private static final String CLAIM_NEXT_PENDING = """
+            WITH next_event AS (
+                SELECT id
+                FROM outbox_events
+                WHERE status = 'PENDING'
+                  AND next_attempt_at <= clock_timestamp()
+                ORDER BY next_attempt_at, created_at, id
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            UPDATE outbox_events event
+            SET
+                status = 'CLAIMED',
+                attempt_count = event.attempt_count + 1,
+                claimed_by = ?,
+                updated_at = clock_timestamp()
+            FROM next_event
+            WHERE event.id = next_event.id
+            RETURNING
+                event.id,
+                event.event_type,
+                event.aggregate_id,
+                event.proof_anchor_id,
+                event.schema_version,
+                event.payload,
+                event.dispatch_key,
+                event.status,
+                event.attempt_count,
+                event.next_attempt_at,
+                event.created_at,
+                event.updated_at
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -92,6 +124,16 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     @Override
     public Optional<OutboxEvent> findByProofAnchorId(UUID proofAnchorId) {
         return findOne(FIND_BY_PROOF_ANCHOR_ID, proofAnchorId);
+    }
+
+    @Override
+    public Optional<OutboxEvent> claimNextPending(String workerId) {
+        if (workerId == null || workerId.isBlank()) {
+            throw new IllegalArgumentException("Worker ID는 비어 있을 수 없습니다.");
+        }
+        return jdbcTemplate.query(CLAIM_NEXT_PENDING, this::mapOutboxEvent, workerId)
+                .stream()
+                .findFirst();
     }
 
     private OutboxEvent mapOutboxEvent(ResultSet resultSet, int rowNumber) throws SQLException {

@@ -12,4 +12,6 @@ public interface OutboxEventRepository {
     Optional<OutboxEvent> findById(UUID outboxEventId);
 
     Optional<OutboxEvent> findByProofAnchorId(UUID proofAnchorId);
+
+    Optional<OutboxEvent> claimNextPending(String workerId);
 }
