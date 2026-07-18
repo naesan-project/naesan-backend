@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -24,6 +25,7 @@ import com.naesan.evidence.adapter.out.storage.LocalFileStorage;
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
 import com.naesan.evidence.application.port.out.FileStorageException;
 import com.naesan.evidence.domain.EvidenceFile;
+import com.naesan.evidence.domain.EvidenceFileState;
 import com.naesan.evidence.domain.StorageKey;
 
 class ReconcileOrphanEvidenceFilesServiceTest {
@@ -93,6 +95,11 @@ class ReconcileOrphanEvidenceFilesServiceTest {
         @Override
         public Set<StorageKey> findAllObjectKeys() {
             return referencedKeys;
+        }
+
+        @Override
+        public List<EvidenceFile> findAllByState(EvidenceFileState state) {
+            return List.of();
         }
 
         @Override

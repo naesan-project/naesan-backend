@@ -150,4 +150,32 @@ class EvidenceFileJdbcRepositoryTest {
         assertThat(repository.findAllObjectKeys())
                 .containsExactly(new StorageKey("temporary/file"));
     }
+
+    @Test
+    @DisplayName("파일 삭제 대기와 완료 상태를 순서대로 저장한다")
+    void updatesDeletionLifecycle() {
+        EvidenceFile temporaryFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                new StorageKey("temporary/file"),
+                "a".repeat(64),
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+        repository.save(temporaryFile);
+
+        EvidenceFile deletionPending = temporaryFile.requestDeletion(
+                CREATED_AT.plusSeconds(1)
+        );
+        repository.update(deletionPending);
+        EvidenceFile deleted = deletionPending.completeDeletion(
+                CREATED_AT.plusSeconds(2)
+        );
+        repository.update(deleted);
+
+        assertThat(repository.findByEvidenceId(EVIDENCE_ID))
+                .contains(deleted);
+        assertThat(repository.findAllObjectKeys()).isEmpty();
+    }
 }

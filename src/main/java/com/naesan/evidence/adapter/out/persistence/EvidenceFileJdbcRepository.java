@@ -4,8 +4,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.Set;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -53,10 +54,35 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
             FROM evidence_files
             WHERE state <> 'DELETED'
             """;
-    private static final String UPDATE_FILE = """
+    private static final String FIND_ALL_BY_STATE = """
+            SELECT
+                id,
+                evidence_id,
+                object_key,
+                sha256,
+                media_type,
+                size_bytes,
+                state,
+                created_at,
+                updated_at
+            FROM evidence_files
+            WHERE state = ?
+            ORDER BY updated_at, id
+            """;
+    private static final String PROMOTE_FILE = """
             UPDATE evidence_files
             SET object_key = ?, state = ?, updated_at = ?
             WHERE id = ? AND state = 'TEMPORARY'
+            """;
+    private static final String REQUEST_FILE_DELETION = """
+            UPDATE evidence_files
+            SET object_key = ?, state = ?, updated_at = ?
+            WHERE id = ? AND state IN ('TEMPORARY', 'PROMOTED')
+            """;
+    private static final String COMPLETE_FILE_DELETION = """
+            UPDATE evidence_files
+            SET object_key = ?, state = ?, updated_at = ?
+            WHERE id = ? AND state = 'DELETION_PENDING'
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -83,8 +109,9 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
 
     @Override
     public void update(EvidenceFile evidenceFile) {
+        String updateStatement = updateStatement(evidenceFile.state());
         int updatedRowCount = jdbcTemplate.update(
-                UPDATE_FILE,
+                updateStatement,
                 evidenceFile.objectKey().value(),
                 evidenceFile.state().name(),
                 evidenceFile.updatedAt().atOffset(ZoneOffset.UTC),
@@ -95,6 +122,17 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
         }
     }
 
+    private String updateStatement(EvidenceFileState targetState) {
+        return switch (targetState) {
+            case PROMOTED -> PROMOTE_FILE;
+            case DELETION_PENDING -> REQUEST_FILE_DELETION;
+            case DELETED -> COMPLETE_FILE_DELETION;
+            case TEMPORARY -> throw new IllegalArgumentException(
+                    "임시 파일 상태로 갱신할 수 없습니다."
+            );
+        };
+    }
+
     @Override
     public Set<StorageKey> findAllObjectKeys() {
         return Set.copyOf(jdbcTemplate.query(
@@ -102,6 +140,15 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
                 (resultSet, rowNumber) ->
                         new StorageKey(resultSet.getString("object_key"))
         ));
+    }
+
+    @Override
+    public List<EvidenceFile> findAllByState(EvidenceFileState state) {
+        return jdbcTemplate.query(
+                FIND_ALL_BY_STATE,
+                this::mapEvidenceFile,
+                state.name()
+        );
     }
 
     @Override

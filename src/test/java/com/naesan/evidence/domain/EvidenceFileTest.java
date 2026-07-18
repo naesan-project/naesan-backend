@@ -90,4 +90,49 @@ class EvidenceFileTest {
         assertThat(promotedFile.objectKey()).isEqualTo(permanentKey);
         assertThat(promotedFile.updatedAt()).isEqualTo(promotedAt);
     }
+
+    @Test
+    @DisplayName("파일 삭제 요청과 완료 상태를 순서대로 전이한다")
+    void completesDeletionLifecycle() {
+        EvidenceFile evidenceFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                OBJECT_KEY,
+                SHA256,
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+
+        EvidenceFile deletionPending = evidenceFile.requestDeletion(
+                CREATED_AT.plusSeconds(1)
+        );
+        EvidenceFile deleted = deletionPending.completeDeletion(
+                CREATED_AT.plusSeconds(2)
+        );
+
+        assertThat(deletionPending.state())
+                .isEqualTo(EvidenceFileState.DELETION_PENDING);
+        assertThat(deleted.state()).isEqualTo(EvidenceFileState.DELETED);
+    }
+
+    @Test
+    @DisplayName("삭제 대기 전에는 삭제 완료할 수 없다")
+    void rejectsDeletionCompletionWithoutRequest() {
+        EvidenceFile evidenceFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                OBJECT_KEY,
+                SHA256,
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+
+        assertThatThrownBy(() -> evidenceFile.completeDeletion(
+                CREATED_AT.plusSeconds(1)
+        ))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("삭제 대기 파일만 삭제 완료할 수 있습니다.");
+    }
 }

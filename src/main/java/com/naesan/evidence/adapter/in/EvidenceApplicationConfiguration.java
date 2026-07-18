@@ -15,6 +15,7 @@ import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
 import com.naesan.evidence.application.DownloadEvidenceFileService;
+import com.naesan.evidence.application.DeleteEvidenceFileService;
 import com.naesan.evidence.application.EvidenceSnapshotCanonicalizer;
 import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
@@ -33,6 +34,19 @@ public class EvidenceApplicationConfiguration {
     @Bean
     EvidenceSnapshotCanonicalizer evidenceSnapshotCanonicalizer() {
         return new EvidenceSnapshotCanonicalizer();
+    }
+
+    @Bean
+    DeleteEvidenceFileService deleteEvidenceFileService(
+            EvidenceFileRepository evidenceFileRepository,
+            FileStorage fileStorage,
+            Clock clock
+    ) {
+        return new DeleteEvidenceFileService(
+                evidenceFileRepository,
+                fileStorage,
+                clock
+        );
     }
 
     @Bean

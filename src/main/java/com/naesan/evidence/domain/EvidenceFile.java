@@ -145,6 +145,44 @@ public final class EvidenceFile {
                 || state == EvidenceFileState.PROMOTED;
     }
 
+    public EvidenceFile requestDeletion(Instant requestedAt) {
+        if (state == EvidenceFileState.DELETION_PENDING
+                || state == EvidenceFileState.DELETED) {
+            return this;
+        }
+        return new EvidenceFile(
+                id,
+                evidenceId,
+                objectKey,
+                sha256,
+                fileType,
+                size,
+                EvidenceFileState.DELETION_PENDING,
+                createdAt,
+                requestedAt
+        );
+    }
+
+    public EvidenceFile completeDeletion(Instant deletedAt) {
+        if (state == EvidenceFileState.DELETED) {
+            return this;
+        }
+        if (state != EvidenceFileState.DELETION_PENDING) {
+            throw new IllegalStateException("삭제 대기 파일만 삭제 완료할 수 있습니다.");
+        }
+        return new EvidenceFile(
+                id,
+                evidenceId,
+                objectKey,
+                sha256,
+                fileType,
+                size,
+                EvidenceFileState.DELETED,
+                createdAt,
+                deletedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }
