@@ -54,7 +54,8 @@ public class PassportApplicationConfiguration {
             PlatformTransactionManager transactionManager,
             @Value("${naesan.proof.worker.lease-duration}")
             Duration leaseDuration,
-            OutboxRetryPolicy retryPolicy
+            OutboxRetryPolicy retryPolicy,
+            Clock clock
     ) {
         return new ProcessProofOutboxService(
                 outboxEventRepository,
@@ -62,7 +63,8 @@ public class PassportApplicationConfiguration {
                 proofAnchorPort,
                 new TransactionTemplate(transactionManager),
                 leaseDuration,
-                retryPolicy
+                retryPolicy,
+                clock
         );
     }
 

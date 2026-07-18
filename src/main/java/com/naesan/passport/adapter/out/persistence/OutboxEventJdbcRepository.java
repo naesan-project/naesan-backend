@@ -157,6 +157,23 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
               AND claim_token = ?
               AND fencing_version = ?
             """;
+    private static final String SCHEDULE_RECONCILIATION = """
+            UPDATE outbox_events
+            SET
+                status = 'RECONCILE_PENDING',
+                next_attempt_at = clock_timestamp(),
+                error_category = ?,
+                error_code = ?,
+                updated_at = clock_timestamp(),
+                claim_token = NULL,
+                lease_until = NULL,
+                claimed_by = NULL,
+                claim_reason = NULL
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND fencing_version = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -264,6 +281,22 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     ) {
         int updatedRowCount = jdbcTemplate.update(
                 MOVE_TO_DEAD_LETTER,
+                failure.failureType().name(),
+                failure.errorCode(),
+                claim.event().id(),
+                claim.claimToken(),
+                claim.fencingVersion()
+        );
+        return updatedRowCount == 1;
+    }
+
+    @Override
+    public boolean scheduleReconciliation(
+            OutboxClaim claim,
+            ProofProviderException failure
+    ) {
+        int updatedRowCount = jdbcTemplate.update(
+                SCHEDULE_RECONCILIATION,
                 failure.failureType().name(),
                 failure.errorCode(),
                 claim.event().id(),

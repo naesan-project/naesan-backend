@@ -33,4 +33,9 @@ public interface OutboxEventRepository {
             OutboxClaim claim,
             ProofProviderException failure
     );
+
+    boolean scheduleReconciliation(
+            OutboxClaim claim,
+            ProofProviderException failure
+    );
 }

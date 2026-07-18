@@ -303,6 +303,14 @@ class IssuePassportTransactionIntegrationTest {
         ) {
             return delegate.moveToDeadLetter(claim, failure);
         }
+
+        @Override
+        public boolean scheduleReconciliation(
+                OutboxClaim claim,
+                ProofProviderException failure
+        ) {
+            return delegate.scheduleReconciliation(claim, failure);
+        }
     }
 
     static final class SynchronizingAnchorSaltGenerator implements AnchorSaltGenerator {

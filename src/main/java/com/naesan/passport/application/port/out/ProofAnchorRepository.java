@@ -14,4 +14,6 @@ public interface ProofAnchorRepository {
     Optional<ProofAnchor> findByPassportId(UUID passportId);
 
     boolean confirmPrepared(ProofAnchor confirmedProofAnchor);
+
+    boolean markReconcilePending(ProofAnchor proofAnchor);
 }

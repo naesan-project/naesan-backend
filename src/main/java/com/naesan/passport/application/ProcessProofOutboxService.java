@@ -1,8 +1,9 @@
 package com.naesan.passport.application;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.Objects;
-import java.time.Duration;
 import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
@@ -14,8 +15,8 @@ import com.naesan.passport.application.port.out.ProofAnchorReceipt;
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderException;
-import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.OutboxClaim;
+import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.ProofAnchor;
 
 public class ProcessProofOutboxService {
@@ -25,6 +26,7 @@ public class ProcessProofOutboxService {
     private final TransactionTemplate transactionTemplate;
     private final Duration leaseDuration;
     private final OutboxRetryPolicy retryPolicy;
+    private final Clock clock;
 
     public ProcessProofOutboxService(
             OutboxEventRepository outboxEventRepository,
@@ -32,7 +34,8 @@ public class ProcessProofOutboxService {
             ProofAnchorPort proofAnchorPort,
             TransactionTemplate transactionTemplate,
             Duration leaseDuration,
-            OutboxRetryPolicy retryPolicy
+            OutboxRetryPolicy retryPolicy,
+            Clock clock
     ) {
         this.outboxEventRepository = Objects.requireNonNull(outboxEventRepository);
         this.proofAnchorRepository = Objects.requireNonNull(proofAnchorRepository);
@@ -40,6 +43,7 @@ public class ProcessProofOutboxService {
         this.transactionTemplate = Objects.requireNonNull(transactionTemplate);
         this.leaseDuration = Objects.requireNonNull(leaseDuration);
         this.retryPolicy = Objects.requireNonNull(retryPolicy);
+        this.clock = Objects.requireNonNull(clock);
     }
 
     public boolean processNext(String workerId) {
@@ -73,7 +77,10 @@ public class ProcessProofOutboxService {
             );
         } catch (ProofProviderException failure) {
             if (failure.failureType() == ProofFailureType.AMBIGUOUS) {
-                throw failure;
+                transactionTemplate.executeWithoutResult(status ->
+                        finalizeAmbiguousFailure(claim, proofAnchor, failure)
+                );
+                return true;
             }
             transactionTemplate.executeWithoutResult(status ->
                     finalizeFailure(claim, failure)
@@ -85,6 +92,28 @@ public class ProcessProofOutboxService {
                 finalizeSuccess(claim, proofAnchor, receipt)
         );
         return true;
+    }
+
+    private void finalizeAmbiguousFailure(
+            OutboxClaim claim,
+            ProofAnchor proofAnchor,
+            ProofProviderException failure
+    ) {
+        ProofAnchor reconcilePending = proofAnchor.awaitReconciliation(
+                clock.instant()
+        );
+        boolean proofUpdated = proofAnchorRepository.markReconcilePending(
+                reconcilePending
+        );
+        boolean eventUpdated = outboxEventRepository.scheduleReconciliation(
+                claim,
+                failure
+        );
+        if (!proofUpdated || !eventUpdated) {
+            throw new OutboxProcessingException(
+                    "외부 증명 대사 상태를 일관되게 저장하지 못했습니다."
+            );
+        }
     }
 
     private void finalizeFailure(

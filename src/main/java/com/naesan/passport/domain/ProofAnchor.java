@@ -161,6 +161,23 @@ public final class ProofAnchor {
         );
     }
 
+    public ProofAnchor awaitReconciliation(Instant changedAt) {
+        if (state != ProofAnchorState.PREPARED) {
+            throw new IllegalStateException("준비된 외부 증명만 대사 대기로 전환할 수 있습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.RECONCILE_PENDING,
+                externalReference,
+                createdAt,
+                changedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

@@ -1,7 +1,6 @@
 package com.naesan.passport.adapter.in;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -26,7 +25,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
-import com.naesan.passport.application.port.out.ProofProviderException;
 import com.naesan.passport.support.ControllableProofAnchorAdapter;
 import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
 
@@ -178,17 +176,17 @@ class ProcessProofOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("Baseline은 외부 성공 후 응답 유실도 CLAIMED에 고착시킨다")
-    void leavesAmbiguousSuccessClaimed() {
+    @DisplayName("외부 성공 여부가 불명확하면 재제출하지 않고 대사를 예약한다")
+    void schedulesReconciliationAfterAmbiguousSuccess() {
         proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
 
-        assertThatThrownBy(() ->
-                processProofOutboxService.processNext("worker-1")
-        ).isInstanceOf(ProofProviderException.class);
+        boolean processed = processProofOutboxService.processNext("worker-1");
 
-        assertThat(outboxStatus()).isEqualTo("CLAIMED");
+        assertThat(processed).isTrue();
+        assertThat(outboxStatus()).isEqualTo("RECONCILE_PENDING");
+        assertThat(proofState()).isEqualTo("RECONCILE_PENDING");
+        assertThat(outboxError()).containsExactly("AMBIGUOUS", "RESPONSE_LOST");
         assertThat(proofAnchorPort.submitCount()).isOne();
-        assertThat(processProofOutboxService.processNext("worker-2")).isFalse();
     }
 
     private String passportStatus() {
