@@ -3,6 +3,7 @@ package com.naesan.account.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -192,6 +193,67 @@ class AccountSessionApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(sessionRequest(EMAIL, RAW_PASSWORD)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("로그아웃은 현재 session과 CSRF token을 폐기한다")
+    void logsOutCurrentSession() throws Exception {
+        registerAccountService.register(EMAIL, RAW_PASSWORD);
+        MockHttpSession session = new MockHttpSession();
+        login(session, EMAIL, RAW_PASSWORD)
+                .andExpect(status().isCreated());
+        MvcResult csrfResult = issueCsrfToken(session);
+        Cookie csrfCookie = csrfResult.getResponse().getCookie(CSRF_COOKIE);
+        assertThat(csrfCookie).isNotNull();
+
+        mockMvc.perform(delete(CURRENT_SESSION_API)
+                        .session(session)
+                        .cookie(csrfCookie)
+                        .header(CSRF_HEADER, csrfCookie.getValue()))
+                .andExpect(status().isNoContent())
+                .andExpect(cookie().maxAge(CSRF_COOKIE, 0));
+
+        assertThat(session.isInvalid()).isTrue();
+
+        mockMvc.perform(get(CURRENT_SESSION_API))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("CSRF token이 없는 로그아웃은 403이며 기존 session을 유지한다")
+    void rejectsLogoutWithoutCsrfToken() throws Exception {
+        Account account = registerAccountService.register(EMAIL, RAW_PASSWORD);
+        MockHttpSession session = new MockHttpSession();
+        login(session, EMAIL, RAW_PASSWORD)
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(delete(CURRENT_SESSION_API).session(session))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get(CURRENT_SESSION_API).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountId").value(account.id().toString()));
+    }
+
+    @Test
+    @DisplayName("허용한 frontend origin의 로그아웃 preflight를 승인한다")
+    void allowsLogoutPreflightFromFrontend() throws Exception {
+        mockMvc.perform(options(CURRENT_SESSION_API)
+                        .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "x-xsrf-token"
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
+                        FRONTEND_ORIGIN
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                        "true"
+                ));
     }
 
     private ResultActions login(
