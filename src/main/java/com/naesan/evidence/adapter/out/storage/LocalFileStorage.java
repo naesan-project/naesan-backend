@@ -2,10 +2,8 @@ package com.naesan.evidence.adapter.out.storage;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -76,7 +74,7 @@ public final class LocalFileStorage implements FileStorage {
 
         try {
             Files.createDirectories(permanentPath.getParent());
-            moveToPermanentPath(temporaryPath, permanentPath);
+            Files.copy(temporaryPath, permanentPath);
             return permanentKey;
         } catch (IOException exception) {
             throw new FileStorageException("임시 파일을 승격하지 못했습니다.", exception);
@@ -85,19 +83,6 @@ public final class LocalFileStorage implements FileStorage {
 
     private StorageKey createPermanentKey() {
         return new StorageKey(PERMANENT_DIRECTORY + "/" + UUID.randomUUID());
-    }
-
-    private void moveToPermanentPath(Path temporaryPath, Path permanentPath)
-            throws IOException {
-        try {
-            Files.move(
-                    temporaryPath,
-                    permanentPath,
-                    StandardCopyOption.ATOMIC_MOVE
-            );
-        } catch (AtomicMoveNotSupportedException exception) {
-            Files.move(temporaryPath, permanentPath);
-        }
     }
 
     @Override

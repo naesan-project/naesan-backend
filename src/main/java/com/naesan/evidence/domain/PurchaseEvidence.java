@@ -147,6 +147,22 @@ public final class PurchaseEvidence {
         );
     }
 
+    public PurchaseEvidence confirm(Instant confirmedAt) {
+        if (state != PurchaseEvidenceState.FILE_ATTACHED) {
+            throw new IllegalStateException("파일이 연결된 구매 증빙만 확정할 수 있습니다.");
+        }
+        return new PurchaseEvidence(
+                id,
+                ownerAccountId,
+                metadata,
+                PurchaseEvidenceState.CONFIRMED,
+                version + 1,
+                createdAt,
+                confirmedAt,
+                confirmedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

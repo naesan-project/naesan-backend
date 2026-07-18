@@ -11,14 +11,43 @@ import org.springframework.util.unit.DataSize;
 
 import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
+import com.naesan.evidence.application.ConfirmEvidenceService;
+import com.naesan.evidence.application.EvidenceSnapshotCanonicalizer;
 import com.naesan.evidence.application.StoreTemporaryEvidenceFileService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
+import com.naesan.evidence.application.port.out.EvidenceSnapshotRepository;
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class EvidenceApplicationConfiguration {
+
+    @Bean
+    EvidenceSnapshotCanonicalizer evidenceSnapshotCanonicalizer() {
+        return new EvidenceSnapshotCanonicalizer();
+    }
+
+    @Bean
+    ConfirmEvidenceService confirmEvidenceService(
+            PurchaseEvidenceRepository evidenceRepository,
+            EvidenceFileRepository evidenceFileRepository,
+            EvidenceSnapshotRepository snapshotRepository,
+            FileStorage fileStorage,
+            EvidenceSnapshotCanonicalizer canonicalizer,
+            PlatformTransactionManager transactionManager,
+            Clock clock
+    ) {
+        return new ConfirmEvidenceService(
+                evidenceRepository,
+                evidenceFileRepository,
+                snapshotRepository,
+                fileStorage,
+                canonicalizer,
+                new TransactionTemplate(transactionManager),
+                clock
+        );
+    }
 
     @Bean
     AttachEvidenceFileService attachEvidenceFileService(

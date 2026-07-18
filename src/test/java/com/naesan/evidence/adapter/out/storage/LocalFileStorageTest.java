@@ -87,8 +87,9 @@ class LocalFileStorageTest {
         StorageKey permanentKey = fileStorage.promote(temporaryKey);
 
         assertThat(permanentKey.value()).startsWith("permanent/");
-        assertThatThrownBy(() -> fileStorage.open(temporaryKey))
-                .isInstanceOf(FileStorageException.class);
+        try (InputStream temporaryContent = fileStorage.open(temporaryKey)) {
+            assertThat(temporaryContent.readAllBytes()).isEqualTo(FILE_CONTENT);
+        }
         try (InputStream promotedContent = fileStorage.open(permanentKey)) {
             assertThat(promotedContent.readAllBytes()).isEqualTo(FILE_CONTENT);
         }
