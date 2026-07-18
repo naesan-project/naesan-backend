@@ -8,7 +8,10 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import org.springframework.http.MediaType;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,6 +27,8 @@ import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
+import com.naesan.evidence.application.DownloadedEvidenceFile;
+import com.naesan.evidence.application.DownloadEvidenceFileService;
 import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataCommand;
@@ -39,6 +44,7 @@ public class EvidenceApiController {
     private final CreateEvidenceDraftService createEvidenceDraftService;
     private final ListEvidenceService listEvidenceService;
     private final GetEvidenceDetailsService getEvidenceDetailsService;
+    private final DownloadEvidenceFileService downloadEvidenceFileService;
     private final AttachEvidenceFileService attachEvidenceFileService;
     private final UpdateEvidenceMetadataService updateEvidenceMetadataService;
     private final ConfirmEvidenceService confirmEvidenceService;
@@ -47,6 +53,7 @@ public class EvidenceApiController {
             CreateEvidenceDraftService createEvidenceDraftService,
             ListEvidenceService listEvidenceService,
             GetEvidenceDetailsService getEvidenceDetailsService,
+            DownloadEvidenceFileService downloadEvidenceFileService,
             AttachEvidenceFileService attachEvidenceFileService,
             UpdateEvidenceMetadataService updateEvidenceMetadataService,
             ConfirmEvidenceService confirmEvidenceService
@@ -54,6 +61,7 @@ public class EvidenceApiController {
         this.createEvidenceDraftService = createEvidenceDraftService;
         this.listEvidenceService = listEvidenceService;
         this.getEvidenceDetailsService = getEvidenceDetailsService;
+        this.downloadEvidenceFileService = downloadEvidenceFileService;
         this.attachEvidenceFileService = attachEvidenceFileService;
         this.updateEvidenceMetadataService = updateEvidenceMetadataService;
         this.confirmEvidenceService = confirmEvidenceService;
@@ -98,6 +106,32 @@ public class EvidenceApiController {
         return EvidenceDetailsResponse.from(
                 getEvidenceDetailsService.get(account.id(), evidenceId)
         );
+    }
+
+    @GetMapping("/{evidenceId}/file")
+    public ResponseEntity<InputStreamResource> downloadFile(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID evidenceId
+    ) {
+        DownloadedEvidenceFile download = downloadEvidenceFileService.download(
+                account.id(),
+                evidenceId
+        );
+        String filename = "evidence-" + evidenceId + "."
+                + download.file().fileType().fileExtension();
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        download.file().fileType().mediaType()
+                ))
+                .contentLength(download.file().size())
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment()
+                                .filename(filename)
+                                .build()
+                                .toString()
+                )
+                .body(new InputStreamResource(download.content()));
     }
 
     @PutMapping("/{evidenceId}/metadata")

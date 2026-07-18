@@ -29,6 +29,13 @@ public final class EvidenceException extends RuntimeException {
         );
     }
 
+    public static EvidenceException fileUnavailable() {
+        return new EvidenceException(
+                EvidenceErrorCode.FILE_UNAVAILABLE,
+                "구매 증빙 파일을 사용할 수 없습니다."
+        );
+    }
+
     public static EvidenceException concurrentModification() {
         return new EvidenceException(
                 EvidenceErrorCode.CONCURRENT_MODIFICATION,

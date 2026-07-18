@@ -5,17 +5,19 @@ import java.util.Locale;
 import java.util.Optional;
 
 public enum EvidenceFileType {
-    JPEG("image/jpeg", new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}),
-    PNG("image/png", new byte[] {
+    JPEG("image/jpeg", "jpg", new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}),
+    PNG("image/png", "png", new byte[] {
             (byte) 0x89, 'P', 'N', 'G', '\r', '\n', (byte) 0x1A, '\n'
     }),
-    PDF("application/pdf", new byte[] {'%', 'P', 'D', 'F', '-'});
+    PDF("application/pdf", "pdf", new byte[] {'%', 'P', 'D', 'F', '-'});
 
     private final String mediaType;
+    private final String fileExtension;
     private final byte[] signature;
 
-    EvidenceFileType(String mediaType, byte[] signature) {
+    EvidenceFileType(String mediaType, String fileExtension, byte[] signature) {
         this.mediaType = mediaType;
+        this.fileExtension = fileExtension;
         this.signature = signature;
     }
 
@@ -52,5 +54,9 @@ public enum EvidenceFileType {
 
     public String mediaType() {
         return mediaType;
+    }
+
+    public String fileExtension() {
+        return fileExtension;
     }
 }

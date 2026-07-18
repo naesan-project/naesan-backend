@@ -12,6 +12,7 @@ import org.springframework.util.unit.DataSize;
 import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
+import com.naesan.evidence.application.DownloadEvidenceFileService;
 import com.naesan.evidence.application.EvidenceSnapshotCanonicalizer;
 import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
@@ -28,6 +29,19 @@ public class EvidenceApplicationConfiguration {
     @Bean
     EvidenceSnapshotCanonicalizer evidenceSnapshotCanonicalizer() {
         return new EvidenceSnapshotCanonicalizer();
+    }
+
+    @Bean
+    DownloadEvidenceFileService downloadEvidenceFileService(
+            PurchaseEvidenceRepository evidenceRepository,
+            EvidenceFileRepository evidenceFileRepository,
+            FileStorage fileStorage
+    ) {
+        return new DownloadEvidenceFileService(
+                evidenceRepository,
+                evidenceFileRepository,
+                fileStorage
+        );
     }
 
     @Bean

@@ -58,6 +58,7 @@ public class EvidenceApiExceptionHandler {
             case EVIDENCE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case EVIDENCE_NOT_EDITABLE, FILE_ALREADY_ATTACHED, CONCURRENT_MODIFICATION ->
                     HttpStatus.CONFLICT;
+            case FILE_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
         };
         return ResponseEntity.status(status)
                 .body(new ApiErrorResponse(

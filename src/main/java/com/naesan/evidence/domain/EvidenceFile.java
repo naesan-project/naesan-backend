@@ -140,6 +140,11 @@ public final class EvidenceFile {
         );
     }
 
+    public boolean isDownloadable() {
+        return state == EvidenceFileState.TEMPORARY
+                || state == EvidenceFileState.PROMOTED;
+    }
+
     public UUID id() {
         return id;
     }
