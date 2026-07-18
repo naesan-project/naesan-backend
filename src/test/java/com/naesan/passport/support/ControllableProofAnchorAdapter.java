@@ -4,6 +4,9 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -21,10 +24,15 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
             new ConcurrentHashMap<>();
     private final AtomicInteger submitCount = new AtomicInteger();
     private final AtomicInteger lookupCount = new AtomicInteger();
+    private final AtomicBoolean blockNextSubmission = new AtomicBoolean();
     private volatile ProofOutcome outcome = ProofOutcome.SUCCESS;
     private volatile ProofProviderCapabilities capabilities =
             new ProofProviderCapabilities(true, true);
     private volatile boolean lookupFailure;
+    private volatile CountDownLatch blockedSubmissionStarted =
+            new CountDownLatch(0);
+    private volatile CountDownLatch blockedSubmissionRelease =
+            new CountDownLatch(0);
     private volatile boolean transactionActiveDuringSubmit;
 
     public ControllableProofAnchorAdapter(Clock clock) {
@@ -47,10 +55,26 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         receiptsByCommitment.clear();
     }
 
+    public void blockNextSubmission() {
+        blockedSubmissionStarted = new CountDownLatch(1);
+        blockedSubmissionRelease = new CountDownLatch(1);
+        blockNextSubmission.set(true);
+    }
+
+    public void awaitBlockedSubmission() {
+        await(blockedSubmissionStarted, "차단할 외부 증명 요청이 시작되지 않았습니다.");
+    }
+
+    public void releaseBlockedSubmission() {
+        blockedSubmissionRelease.countDown();
+    }
+
     public void reset() {
+        releaseBlockedSubmission();
         receiptsByCommitment.clear();
         submitCount.set(0);
         lookupCount.set(0);
+        blockNextSubmission.set(false);
         outcome = ProofOutcome.SUCCESS;
         capabilities = new ProofProviderCapabilities(true, true);
         lookupFailure = false;
@@ -63,6 +87,10 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
 
     public int lookupCount() {
         return lookupCount.get();
+    }
+
+    public int storedReceiptCount() {
+        return receiptsByCommitment.size();
     }
 
     public boolean transactionActiveDuringSubmit() {
@@ -79,6 +107,13 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         transactionActiveDuringSubmit =
                 TransactionSynchronizationManager.isActualTransactionActive();
         submitCount.incrementAndGet();
+        if (blockNextSubmission.compareAndSet(true, false)) {
+            blockedSubmissionStarted.countDown();
+            await(
+                    blockedSubmissionRelease,
+                    "차단된 외부 증명 요청이 해제되지 않았습니다."
+            );
+        }
         return switch (outcome) {
             case SUCCESS -> storeReceipt(command.commitment());
             case RETRYABLE_FAILURE -> throw new ProofProviderException(
@@ -119,6 +154,17 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
             );
         }
         return Optional.ofNullable(receiptsByCommitment.get(commitment));
+    }
+
+    private void await(CountDownLatch latch, String timeoutMessage) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException(timeoutMessage);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("외부 증명 요청 대기가 중단되었습니다.", exception);
+        }
     }
 
     public enum ProofOutcome {
