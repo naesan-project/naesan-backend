@@ -12,6 +12,7 @@ import org.springframework.util.unit.DataSize;
 import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.StoreTemporaryEvidenceFileService;
+import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
@@ -44,6 +45,14 @@ public class EvidenceApplicationConfiguration {
             Clock clock
     ) {
         return new CreateEvidenceDraftService(evidenceRepository, clock);
+    }
+
+    @Bean
+    UpdateEvidenceMetadataService updateEvidenceMetadataService(
+            PurchaseEvidenceRepository evidenceRepository,
+            Clock clock
+    ) {
+        return new UpdateEvidenceMetadataService(evidenceRepository, clock);
     }
 
     @Bean

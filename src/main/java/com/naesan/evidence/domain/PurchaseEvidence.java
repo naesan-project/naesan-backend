@@ -128,6 +128,25 @@ public final class PurchaseEvidence {
         );
     }
 
+    public PurchaseEvidence updateMetadata(
+            EvidenceMetadata updatedMetadata,
+            Instant updatedAt
+    ) {
+        if (state == PurchaseEvidenceState.CONFIRMED) {
+            throw new IllegalStateException("확정된 구매 증빙은 수정할 수 없습니다.");
+        }
+        return new PurchaseEvidence(
+                id,
+                ownerAccountId,
+                updatedMetadata,
+                state,
+                version + 1,
+                createdAt,
+                updatedAt,
+                null
+        );
+    }
+
     public UUID id() {
         return id;
     }

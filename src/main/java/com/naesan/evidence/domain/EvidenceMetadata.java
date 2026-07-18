@@ -98,4 +98,10 @@ public record EvidenceMetadata(
     private static boolean isUppercaseAscii(int character) {
         return character >= 'A' && character <= 'Z';
     }
+
+    public void requirePurchasedOnOrBefore(LocalDate date) {
+        if (purchasedAt.isAfter(date)) {
+            throw new IllegalArgumentException("구매일은 미래일 수 없습니다.");
+        }
+    }
 }

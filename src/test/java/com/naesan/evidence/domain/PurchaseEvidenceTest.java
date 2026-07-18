@@ -56,6 +56,33 @@ class PurchaseEvidenceTest {
     }
 
     @Test
+    @DisplayName("확정 전 metadata를 수정하면 version을 증가시킨다")
+    void updatesMetadataBeforeConfirmation() {
+        PurchaseEvidence draft = PurchaseEvidence.createDraft(
+                EVIDENCE_ID,
+                OWNER_ACCOUNT_ID,
+                metadata(),
+                CREATED_AT
+        );
+        EvidenceMetadata updatedMetadata = new EvidenceMetadata(
+                "새 상점",
+                "새 제품",
+                null,
+                LocalDate.parse("2026-07-02"),
+                new BigDecimal("2000.00"),
+                "KRW"
+        );
+
+        PurchaseEvidence updated = draft.updateMetadata(
+                updatedMetadata,
+                CREATED_AT.plusSeconds(1)
+        );
+
+        assertThat(updated.metadata()).isEqualTo(updatedMetadata);
+        assertThat(updated.version()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("음수 version을 가진 구매 증빙을 거절한다")
     void rejectsNegativeVersion() {
         assertThatThrownBy(() -> PurchaseEvidence.restore(
