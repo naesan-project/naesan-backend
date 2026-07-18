@@ -62,16 +62,59 @@ public class ConfirmEvidenceService {
         StorageKey permanentKey = fileStorage.promote(temporaryKey);
         Instant confirmedAt = clock.instant().truncatedTo(ChronoUnit.MILLIS);
 
-        EvidenceSnapshot snapshot = transactionTemplate.execute(status ->
-                persistConfirmation(
-                        ownerAccountId,
-                        evidenceId,
-                        permanentKey,
-                        confirmedAt
-                )
+        EvidenceSnapshot snapshot = persistOrResolveConfirmation(
+                ownerAccountId,
+                evidenceId,
+                permanentKey,
+                confirmedAt
         );
         fileStorage.delete(temporaryKey);
         return snapshot;
+    }
+
+    private EvidenceSnapshot persistOrResolveConfirmation(
+            UUID ownerAccountId,
+            UUID evidenceId,
+            StorageKey permanentKey,
+            Instant confirmedAt
+    ) {
+        try {
+            return transactionTemplate.execute(status ->
+                    persistConfirmation(
+                            ownerAccountId,
+                            evidenceId,
+                            permanentKey,
+                            confirmedAt
+                    )
+            );
+        } catch (RuntimeException confirmationFailure) {
+            return resolveConcurrentConfirmation(
+                    evidenceId,
+                    permanentKey,
+                    confirmationFailure
+            );
+        }
+    }
+
+    private EvidenceSnapshot resolveConcurrentConfirmation(
+            UUID evidenceId,
+            StorageKey redundantPermanentKey,
+            RuntimeException confirmationFailure
+    ) {
+        deleteRedundantObject(redundantPermanentKey, confirmationFailure);
+        return snapshotRepository.findByEvidenceId(evidenceId)
+                .orElseThrow(() -> confirmationFailure);
+    }
+
+    private void deleteRedundantObject(
+            StorageKey redundantPermanentKey,
+            RuntimeException confirmationFailure
+    ) {
+        try {
+            fileStorage.delete(redundantPermanentKey);
+        } catch (RuntimeException cleanupFailure) {
+            confirmationFailure.addSuppressed(cleanupFailure);
+        }
     }
 
     private PurchaseEvidence ownedEvidence(UUID ownerAccountId, UUID evidenceId) {
