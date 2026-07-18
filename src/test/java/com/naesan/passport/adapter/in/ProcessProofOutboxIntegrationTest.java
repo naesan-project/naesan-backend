@@ -141,6 +141,10 @@ class ProcessProofOutboxIntegrationTest {
         assertThat(passportStatus()).isEqualTo("ACTIVE");
         assertThat(proofState()).isEqualTo("PREPARED");
         assertThat(outboxStatus()).isEqualTo("RETRY_WAIT");
+        assertThat(outboxNextAttemptIsFuture()).isTrue();
+        assertThat(outboxError())
+                .containsExactly("RETRYABLE", "PROVIDER_UNAVAILABLE");
+        assertThat(proofAnchorPort.submitCount()).isOne();
         assertThat(processProofOutboxService.processNext("worker-2")).isFalse();
     }
 
@@ -177,24 +181,17 @@ class ProcessProofOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("외부 성공 여부가 불명확하면 재제출하지 않고 대사를 예약한다")
-    void schedulesReconciliationAfterAmbiguousSuccess() {
+    @DisplayName("동일한 응답 유실 조건을 lookup-first로 복구해 중복 제출을 막는다")
+    void verifiesHardenedResponseLossUnderSameCondition() {
         proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
 
-        boolean processed = processProofOutboxService.processNext("worker-1");
+        boolean ambiguous = processProofOutboxService.processNext("worker-1");
 
-        assertThat(processed).isTrue();
+        assertThat(ambiguous).isTrue();
         assertThat(outboxStatus()).isEqualTo("RECONCILE_PENDING");
         assertThat(proofState()).isEqualTo("RECONCILE_PENDING");
         assertThat(outboxError()).containsExactly("AMBIGUOUS", "RESPONSE_LOST");
         assertThat(proofAnchorPort.submitCount()).isOne();
-    }
-
-    @Test
-    @DisplayName("응답 유실 뒤 lookup으로 기존 성공을 찾아 재제출 없이 완료한다")
-    void reconcilesAmbiguousSuccessWithoutResubmission() {
-        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
-        processProofOutboxService.processNext("worker-1");
 
         boolean reconciled = processProofOutboxService.processNext("worker-2");
 
@@ -293,6 +290,16 @@ class ProcessProofOutboxIntegrationTest {
                 "SELECT attempt_count FROM outbox_events",
                 Integer.class
         );
+    }
+
+    private boolean outboxNextAttemptIsFuture() {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                """
+                SELECT next_attempt_at > clock_timestamp()
+                FROM outbox_events
+                """,
+                Boolean.class
+        ));
     }
 
     private List<String> outboxError() {
