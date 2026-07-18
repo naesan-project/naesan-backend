@@ -22,6 +22,13 @@ public final class AccountException extends RuntimeException {
         );
     }
 
+    public static AccountException concurrentModification() {
+        return new AccountException(
+                AccountErrorCode.CONCURRENT_MODIFICATION,
+                "계정 상태가 다른 요청에서 변경되었습니다."
+        );
+    }
+
     public AccountErrorCode code() {
         return code;
     }

@@ -51,6 +51,23 @@ class AccountTest {
     }
 
     @Test
+    @DisplayName("계정 삭제 요청은 접근할 수 없는 삭제 대기 상태로 전이한다")
+    void requestsAccountDeletion() {
+        Account account = Account.create(
+                ACCOUNT_ID,
+                EMAIL,
+                PASSWORD_HASH,
+                CREATED_AT
+        );
+
+        Account deletionPending = account.requestDeletion();
+
+        assertThat(deletionPending.status())
+                .isEqualTo(AccountStatus.DELETION_PENDING);
+        assertThat(deletionPending.canAuthenticate()).isFalse();
+    }
+
+    @Test
     @DisplayName("필수 값이 null이면 계정을 생성하지 않는다")
     void rejectsNullRequiredValue() {
         assertThatThrownBy(() -> Account.create(null, EMAIL, PASSWORD_HASH, CREATED_AT))

@@ -26,6 +26,7 @@ import com.naesan.evidence.application.port.out.EvidenceFileRepository;
 import com.naesan.evidence.application.port.out.EvidenceSnapshotRepository;
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
+import com.naesan.account.application.port.out.AccountEvidenceDeletion;
 
 @Configuration(proxyBeanMethods = false)
 @EnableScheduling
@@ -34,6 +35,17 @@ public class EvidenceApplicationConfiguration {
     @Bean
     EvidenceSnapshotCanonicalizer evidenceSnapshotCanonicalizer() {
         return new EvidenceSnapshotCanonicalizer();
+    }
+
+    @Bean
+    AccountEvidenceDeletion accountEvidenceDeletion(
+            PurchaseEvidenceRepository evidenceRepository,
+            DeleteEvidenceFileService deleteEvidenceFileService
+    ) {
+        return new AccountEvidenceDeletionAdapter(
+                evidenceRepository,
+                deleteEvidenceFileService
+        );
     }
 
     @Bean

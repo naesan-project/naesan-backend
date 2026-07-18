@@ -28,6 +28,8 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
+import com.naesan.account.application.port.out.AccountRepository;
+
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
 
@@ -37,6 +39,7 @@ public class SecurityConfiguration {
             CookieCsrfTokenRepository csrfTokenRepository,
             SecurityContextRepository securityContextRepository,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
+            AccountRepository accountRepository,
             Clock clock,
             @Value("${naesan.security.session.absolute-timeout}")
             Duration absoluteSessionTimeout
@@ -81,6 +84,10 @@ public class SecurityConfiguration {
                                 csrfTokenRepository
                         ),
                         CorsFilter.class
+                )
+                .addFilterAfter(
+                        new ActiveAccountFilter(accountRepository),
+                        AbsoluteSessionTimeoutFilter.class
                 );
 
         return http.build();

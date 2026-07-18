@@ -54,6 +54,7 @@ public class AccountApiExceptionHandler {
         HttpStatus status = switch (exception.code()) {
             case EMAIL_ALREADY_REGISTERED -> HttpStatus.CONFLICT;
             case INVALID_CREDENTIALS -> HttpStatus.UNAUTHORIZED;
+            case CONCURRENT_MODIFICATION -> HttpStatus.CONFLICT;
         };
         ApiErrorResponse response = new ApiErrorResponse(
                 exception.code().name(),

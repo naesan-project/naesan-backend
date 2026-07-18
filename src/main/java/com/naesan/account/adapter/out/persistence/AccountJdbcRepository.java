@@ -31,10 +31,20 @@ public class AccountJdbcRepository implements AccountRepository {
             FROM accounts
             WHERE email = ?
             """;
+    private static final String FIND_BY_ID = """
+            SELECT id, email, password_hash, status, created_at
+            FROM accounts
+            WHERE id = ?
+            """;
     private static final String INSERT_ACCOUNT = """
             INSERT INTO accounts (id, email, password_hash, status, created_at)
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT ON CONSTRAINT accounts_email_unique DO NOTHING
+            """;
+    private static final String UPDATE_ACCOUNT = """
+            UPDATE accounts
+            SET status = ?
+            WHERE id = ? AND status = 'ACTIVE'
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -52,6 +62,13 @@ public class AccountJdbcRepository implements AccountRepository {
     @Override
     public Optional<Account> findByEmail(Email email) {
         return jdbcTemplate.query(FIND_BY_EMAIL, this::mapAccount, email.value())
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public Optional<Account> findById(UUID accountId) {
+        return jdbcTemplate.query(FIND_BY_ID, this::mapAccount, accountId)
                 .stream()
                 .findFirst();
     }
@@ -79,6 +96,18 @@ public class AccountJdbcRepository implements AccountRepository {
 
         if (insertedRowCount == 0) {
             throw AccountException.emailAlreadyRegistered();
+        }
+    }
+
+    @Override
+    public void update(Account account) {
+        int updatedRowCount = jdbcTemplate.update(
+                UPDATE_ACCOUNT,
+                account.status().name(),
+                account.id()
+        );
+        if (updatedRowCount == 0) {
+            throw AccountException.concurrentModification();
         }
     }
 }

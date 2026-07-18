@@ -127,7 +127,17 @@ class AuthenticateAccountServiceTest {
         }
 
         @Override
+        public Optional<Account> findById(UUID accountId) {
+            return Optional.ofNullable(account)
+                    .filter(foundAccount -> foundAccount.id().equals(accountId));
+        }
+
+        @Override
         public void save(Account account) {
+        }
+
+        @Override
+        public void update(Account account) {
         }
     }
 

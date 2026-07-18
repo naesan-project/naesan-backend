@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -97,7 +98,18 @@ class RegisterAccountServiceTest {
         }
 
         @Override
+        public Optional<Account> findById(UUID accountId) {
+            return Optional.ofNullable(savedAccount)
+                    .filter(account -> account.id().equals(accountId));
+        }
+
+        @Override
         public void save(Account account) {
+            savedAccount = account;
+        }
+
+        @Override
+        public void update(Account account) {
             savedAccount = account;
         }
 

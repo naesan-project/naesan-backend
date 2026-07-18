@@ -4,9 +4,13 @@ import java.time.Clock;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.naesan.account.application.AuthenticateAccountService;
+import com.naesan.account.application.DeleteAccountService;
 import com.naesan.account.application.RegisterAccountService;
+import com.naesan.account.application.port.out.AccountEvidenceDeletion;
 import com.naesan.account.application.port.out.AccountRepository;
 import com.naesan.account.application.port.out.PasswordHasher;
 import com.naesan.account.domain.PasswordHash;
@@ -30,6 +34,19 @@ public class AccountApplicationConfiguration {
                 accountRepository,
                 passwordHasher,
                 missingAccountPasswordHash
+        );
+    }
+
+    @Bean
+    DeleteAccountService deleteAccountService(
+            AccountRepository accountRepository,
+            AccountEvidenceDeletion evidenceDeletion,
+            PlatformTransactionManager transactionManager
+    ) {
+        return new DeleteAccountService(
+                accountRepository,
+                evidenceDeletion,
+                new TransactionTemplate(transactionManager)
         );
     }
 

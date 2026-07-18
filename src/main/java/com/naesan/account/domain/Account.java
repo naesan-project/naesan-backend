@@ -59,6 +59,19 @@ public final class Account {
         return status == AccountStatus.ACTIVE;
     }
 
+    public Account requestDeletion() {
+        if (status != AccountStatus.ACTIVE) {
+            return this;
+        }
+        return new Account(
+                id,
+                email,
+                passwordHash,
+                AccountStatus.DELETION_PENDING,
+                createdAt
+        );
+    }
+
     public UUID id() {
         return id;
     }
