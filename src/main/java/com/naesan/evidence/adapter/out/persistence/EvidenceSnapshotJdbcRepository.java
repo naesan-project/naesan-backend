@@ -37,6 +37,17 @@ public class EvidenceSnapshotJdbcRepository implements EvidenceSnapshotRepositor
             FROM evidence_snapshots
             WHERE evidence_id = ?
             """;
+    private static final String FIND_BY_ID = """
+            SELECT
+                id,
+                evidence_id,
+                schema_version,
+                canonical_payload,
+                snapshot_digest,
+                created_at
+            FROM evidence_snapshots
+            WHERE id = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -58,14 +69,19 @@ public class EvidenceSnapshotJdbcRepository implements EvidenceSnapshotRepositor
     }
 
     @Override
-    public Optional<EvidenceSnapshot> findByEvidenceId(UUID evidenceId) {
-        return jdbcTemplate.query(
-                        FIND_BY_EVIDENCE_ID,
-                        this::mapSnapshot,
-                        evidenceId
-                )
+    public Optional<EvidenceSnapshot> findById(UUID snapshotId) {
+        return findOne(FIND_BY_ID, snapshotId);
+    }
+
+    private Optional<EvidenceSnapshot> findOne(String sql, UUID id) {
+        return jdbcTemplate.query(sql, this::mapSnapshot, id)
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public Optional<EvidenceSnapshot> findByEvidenceId(UUID evidenceId) {
+        return findOne(FIND_BY_EVIDENCE_ID, evidenceId);
     }
 
     private EvidenceSnapshot mapSnapshot(ResultSet resultSet, int rowNumber) throws SQLException {

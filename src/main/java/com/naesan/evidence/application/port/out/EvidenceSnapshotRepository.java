@@ -9,5 +9,7 @@ public interface EvidenceSnapshotRepository {
 
     void save(EvidenceSnapshot snapshot);
 
+    Optional<EvidenceSnapshot> findById(UUID snapshotId);
+
     Optional<EvidenceSnapshot> findByEvidenceId(UUID evidenceId);
 }
