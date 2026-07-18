@@ -4,6 +4,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -13,7 +14,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.naesan.account.application.AccountException;
 
-@RestControllerAdvice(assignableTypes = AccountApiController.class)
+@RestControllerAdvice(assignableTypes = {
+        AccountApiController.class,
+        AccountSessionApiController.class
+})
 public class AccountApiExceptionHandler {
     private static final String INVALID_REQUEST_CODE = "INVALID_REQUEST";
     private static final String INVALID_ACCOUNT_INPUT_CODE = "INVALID_ACCOUNT_INPUT";
@@ -46,12 +50,16 @@ public class AccountApiExceptionHandler {
     }
 
     @ExceptionHandler(AccountException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    ApiErrorResponse handleAccountException(AccountException exception) {
-        return new ApiErrorResponse(
+    ResponseEntity<ApiErrorResponse> handleAccountException(AccountException exception) {
+        HttpStatus status = switch (exception.code()) {
+            case EMAIL_ALREADY_REGISTERED -> HttpStatus.CONFLICT;
+            case INVALID_CREDENTIALS -> HttpStatus.UNAUTHORIZED;
+        };
+        ApiErrorResponse response = new ApiErrorResponse(
                 exception.code().name(),
                 exception.getMessage()
         );
+        return ResponseEntity.status(status).body(response);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
