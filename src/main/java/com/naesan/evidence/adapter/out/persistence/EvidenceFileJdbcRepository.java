@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +48,11 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
             FROM evidence_files
             WHERE evidence_id = ?
             """;
+    private static final String FIND_ALL_OBJECT_KEYS = """
+            SELECT object_key
+            FROM evidence_files
+            WHERE state <> 'DELETED'
+            """;
     private static final String UPDATE_FILE = """
             UPDATE evidence_files
             SET object_key = ?, state = ?, updated_at = ?
@@ -87,6 +93,15 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
         if (updatedRowCount == 0) {
             throw EvidenceException.concurrentModification();
         }
+    }
+
+    @Override
+    public Set<StorageKey> findAllObjectKeys() {
+        return Set.copyOf(jdbcTemplate.query(
+                FIND_ALL_OBJECT_KEYS,
+                (resultSet, rowNumber) ->
+                        new StorageKey(resultSet.getString("object_key"))
+        ));
     }
 
     @Override

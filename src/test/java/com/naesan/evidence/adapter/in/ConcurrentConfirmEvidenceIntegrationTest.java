@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
@@ -37,6 +38,7 @@ import com.naesan.evidence.application.port.out.EvidenceSnapshotRepository;
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.FileStorageException;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
+import com.naesan.evidence.application.port.out.StoredObjectMetadata;
 import com.naesan.evidence.domain.EvidenceSnapshot;
 import com.naesan.evidence.domain.StorageKey;
 
@@ -194,6 +196,11 @@ class ConcurrentConfirmEvidenceIntegrationTest {
             StorageKey permanentKey = delegate.promote(temporaryKey);
             awaitConcurrentPromotion();
             return permanentKey;
+        }
+
+        @Override
+        public List<StoredObjectMetadata> listPermanentObjects() {
+            return delegate.listPermanentObjects();
         }
 
         private void awaitConcurrentPromotion() {

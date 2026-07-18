@@ -1,10 +1,12 @@
 package com.naesan.evidence.adapter.in;
 
+import java.time.Duration;
 import java.time.Clock;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.unit.DataSize;
@@ -16,6 +18,7 @@ import com.naesan.evidence.application.DownloadEvidenceFileService;
 import com.naesan.evidence.application.EvidenceSnapshotCanonicalizer;
 import com.naesan.evidence.application.GetEvidenceDetailsService;
 import com.naesan.evidence.application.ListEvidenceService;
+import com.naesan.evidence.application.ReconcileOrphanEvidenceFilesService;
 import com.naesan.evidence.application.StoreTemporaryEvidenceFileService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
@@ -24,11 +27,28 @@ import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
 
 @Configuration(proxyBeanMethods = false)
+@EnableScheduling
 public class EvidenceApplicationConfiguration {
 
     @Bean
     EvidenceSnapshotCanonicalizer evidenceSnapshotCanonicalizer() {
         return new EvidenceSnapshotCanonicalizer();
+    }
+
+    @Bean
+    ReconcileOrphanEvidenceFilesService reconcileOrphanEvidenceFilesService(
+            EvidenceFileRepository evidenceFileRepository,
+            FileStorage fileStorage,
+            Clock clock,
+            @Value("${naesan.evidence.orphan.minimum-age}")
+            Duration minimumObjectAge
+    ) {
+        return new ReconcileOrphanEvidenceFilesService(
+                evidenceFileRepository,
+                fileStorage,
+                clock,
+                minimumObjectAge
+        );
     }
 
     @Bean

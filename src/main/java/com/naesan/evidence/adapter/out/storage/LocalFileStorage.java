@@ -4,11 +4,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 import com.naesan.evidence.application.port.out.FileStorage;
 import com.naesan.evidence.application.port.out.FileStorageException;
+import com.naesan.evidence.application.port.out.StoredObjectMetadata;
 import com.naesan.evidence.domain.StorageKey;
 
 public final class LocalFileStorage implements FileStorage {
@@ -83,6 +86,42 @@ public final class LocalFileStorage implements FileStorage {
 
     private StorageKey createPermanentKey() {
         return new StorageKey(PERMANENT_DIRECTORY + "/" + UUID.randomUUID());
+    }
+
+    @Override
+    public List<StoredObjectMetadata> listPermanentObjects() {
+        Path permanentDirectory = rootDirectory.resolve(PERMANENT_DIRECTORY);
+        if (Files.notExists(permanentDirectory)) {
+            return List.of();
+        }
+
+        try (var objectPaths = Files.list(permanentDirectory)) {
+            return objectPaths
+                    .filter(Files::isRegularFile)
+                    .map(this::storedObjectMetadata)
+                    .toList();
+        } catch (IOException exception) {
+            throw new FileStorageException(
+                    "영구 저장 파일 목록을 조회하지 못했습니다.",
+                    exception
+            );
+        }
+    }
+
+    private StoredObjectMetadata storedObjectMetadata(Path objectPath) {
+        try {
+            StorageKey key = new StorageKey(
+                    PERMANENT_DIRECTORY + "/" + objectPath.getFileName()
+            );
+            Instant lastModifiedAt = Files.getLastModifiedTime(objectPath)
+                    .toInstant();
+            return new StoredObjectMetadata(key, lastModifiedAt);
+        } catch (IOException exception) {
+            throw new FileStorageException(
+                    "영구 저장 파일 정보를 조회하지 못했습니다.",
+                    exception
+            );
+        }
     }
 
     @Override

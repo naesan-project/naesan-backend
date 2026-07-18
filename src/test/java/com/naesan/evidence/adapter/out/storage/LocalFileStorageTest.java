@@ -96,6 +96,21 @@ class LocalFileStorageTest {
     }
 
     @Test
+    @DisplayName("영구 파일 key와 수정 시각을 조회한다")
+    void listsPermanentObjects() {
+        LocalFileStorage fileStorage = fileStorage();
+        StorageKey temporaryKey = fileStorage.storeTemporary(content());
+        StorageKey permanentKey = fileStorage.promote(temporaryKey);
+
+        assertThat(fileStorage.listPermanentObjects())
+                .singleElement()
+                .satisfies(storedObject -> {
+                    assertThat(storedObject.key()).isEqualTo(permanentKey);
+                    assertThat(storedObject.lastModifiedAt()).isNotNull();
+                });
+    }
+
+    @Test
     @DisplayName("저장소 경계를 벗어나는 키를 거절한다")
     void rejectsKeyOutsideStorageRoot() {
         LocalFileStorage fileStorage = fileStorage();

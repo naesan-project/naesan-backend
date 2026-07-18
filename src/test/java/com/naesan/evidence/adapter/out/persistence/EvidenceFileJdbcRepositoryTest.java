@@ -132,4 +132,22 @@ class EvidenceFileJdbcRepositoryTest {
                 .satisfies(savedFile -> assertThat(savedFile.objectKey())
                         .isEqualTo(new StorageKey("permanent/file")));
     }
+
+    @Test
+    @DisplayName("삭제되지 않은 파일의 저장소 key만 조회한다")
+    void findsReferencedObjectKeys() {
+        EvidenceFile evidenceFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                new StorageKey("temporary/file"),
+                "a".repeat(64),
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+        repository.save(evidenceFile);
+
+        assertThat(repository.findAllObjectKeys())
+                .containsExactly(new StorageKey("temporary/file"));
+    }
 }
