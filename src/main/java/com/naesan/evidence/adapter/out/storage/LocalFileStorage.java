@@ -36,6 +36,9 @@ public final class LocalFileStorage implements FileStorage {
         } catch (IOException exception) {
             deletePartiallyStoredObject(objectPath, exception);
             throw new FileStorageException("임시 파일을 저장하지 못했습니다.", exception);
+        } catch (RuntimeException exception) {
+            deletePartiallyStoredObject(objectPath, exception);
+            throw exception;
         }
     }
 
@@ -43,7 +46,7 @@ public final class LocalFileStorage implements FileStorage {
         return new StorageKey(TEMPORARY_DIRECTORY + "/" + UUID.randomUUID());
     }
 
-    private void deletePartiallyStoredObject(Path objectPath, IOException storageFailure) {
+    private void deletePartiallyStoredObject(Path objectPath, Throwable storageFailure) {
         try {
             Files.deleteIfExists(objectPath);
         } catch (IOException cleanupFailure) {
