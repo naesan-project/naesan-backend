@@ -84,6 +84,13 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 event.created_at,
                 event.updated_at
             """;
+    private static final String COMPLETE_CLAIMED = """
+            UPDATE outbox_events
+            SET
+                status = ?,
+                updated_at = ?
+            WHERE id = ? AND status = 'CLAIMED'
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -134,6 +141,17 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
         return jdbcTemplate.query(CLAIM_NEXT_PENDING, this::mapOutboxEvent, workerId)
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public boolean completeClaimed(OutboxEvent succeededEvent) {
+        int updatedRowCount = jdbcTemplate.update(
+                COMPLETE_CLAIMED,
+                succeededEvent.status().name(),
+                succeededEvent.updatedAt().atOffset(ZoneOffset.UTC),
+                succeededEvent.id()
+        );
+        return updatedRowCount == 1;
     }
 
     private OutboxEvent mapOutboxEvent(ResultSet resultSet, int rowNumber) throws SQLException {

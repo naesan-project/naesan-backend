@@ -12,4 +12,6 @@ public interface ProofAnchorRepository {
     Optional<ProofAnchor> findById(UUID proofAnchorId);
 
     Optional<ProofAnchor> findByPassportId(UUID passportId);
+
+    boolean confirmPrepared(ProofAnchor confirmedProofAnchor);
 }

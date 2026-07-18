@@ -46,6 +46,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_PASSPORT_ID =
             SELECT_COLUMNS + " WHERE passport_id = ?";
+    private static final String CONFIRM_PREPARED = """
+            UPDATE proof_anchors
+            SET
+                state = ?,
+                external_reference = ?,
+                updated_at = ?
+            WHERE id = ? AND state = 'PREPARED'
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -83,6 +91,18 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
     @Override
     public Optional<ProofAnchor> findByPassportId(UUID passportId) {
         return findOne(FIND_BY_PASSPORT_ID, passportId);
+    }
+
+    @Override
+    public boolean confirmPrepared(ProofAnchor confirmedProofAnchor) {
+        int updatedRowCount = jdbcTemplate.update(
+                CONFIRM_PREPARED,
+                confirmedProofAnchor.state().name(),
+                confirmedProofAnchor.externalReference(),
+                confirmedProofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
+                confirmedProofAnchor.id()
+        );
+        return updatedRowCount == 1;
     }
 
     private ProofAnchor mapProofAnchor(ResultSet resultSet, int rowNumber) throws SQLException {

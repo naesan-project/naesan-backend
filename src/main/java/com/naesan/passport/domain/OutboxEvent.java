@@ -152,6 +152,26 @@ public final class OutboxEvent {
         );
     }
 
+    public OutboxEvent succeed(Instant succeededAt) {
+        if (status != OutboxEventStatus.CLAIMED) {
+            throw new IllegalStateException("Claim된 Outbox event만 완료할 수 있습니다.");
+        }
+        return new OutboxEvent(
+                id,
+                eventType,
+                aggregateId,
+                proofAnchorId,
+                schemaVersion,
+                payload,
+                dispatchKey,
+                OutboxEventStatus.SUCCEEDED,
+                attemptCount,
+                nextAttemptAt,
+                createdAt,
+                succeededAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

@@ -274,6 +274,11 @@ class IssuePassportTransactionIntegrationTest {
         public Optional<OutboxEvent> claimNextPending(String workerId) {
             return delegate.claimNextPending(workerId);
         }
+
+        @Override
+        public boolean completeClaimed(OutboxEvent succeededEvent) {
+            return delegate.completeClaimed(succeededEvent);
+        }
     }
 
     static final class SynchronizingAnchorSaltGenerator implements AnchorSaltGenerator {
