@@ -26,13 +26,14 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.adapter.out.persistence.OutboxEventJdbcRepository;
 import com.naesan.passport.adapter.out.security.SecureRandomAnchorSaltGenerator;
 import com.naesan.passport.application.IssuePassportService;
+import com.naesan.passport.application.PassportErrorCode;
+import com.naesan.passport.application.PassportException;
 import com.naesan.passport.application.port.out.AnchorSaltGenerator;
 import com.naesan.passport.application.port.out.OutboxEventRepository;
 import com.naesan.passport.domain.OutboxEvent;
@@ -162,7 +163,7 @@ class IssuePassportTransactionIntegrationTest {
                     .filter(this::completedSuccessfully)
                     .count();
             long conflictCount = requests.stream()
-                    .filter(this::failedWithUniqueConflict)
+                    .filter(this::failedWithIssuanceConflict)
                     .count();
 
             assertThat(successCount).isOne();
@@ -184,12 +185,14 @@ class IssuePassportTransactionIntegrationTest {
         }
     }
 
-    private boolean failedWithUniqueConflict(Future<?> request) {
+    private boolean failedWithIssuanceConflict(Future<?> request) {
         try {
             request.get();
             return false;
         } catch (ExecutionException exception) {
-            return exception.getCause() instanceof DataIntegrityViolationException;
+            return exception.getCause() instanceof PassportException passportException
+                    && passportException.code()
+                    == PassportErrorCode.PASSPORT_ALREADY_ISSUED;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("동시 발급 결과 대기가 중단되었습니다.", exception);

@@ -9,8 +9,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Repository;
 
+import com.naesan.passport.application.PassportException;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.passport.domain.Passport;
 import com.naesan.passport.domain.PassportStatus;
@@ -54,15 +56,19 @@ public class PassportJdbcRepository implements PassportRepository {
 
     @Override
     public void save(Passport passport) {
-        jdbcTemplate.update(
-                INSERT_PASSPORT,
-                passport.id(),
-                passport.snapshotId(),
-                passport.currentHolderAccountId(),
-                passport.status().name(),
-                passport.version(),
-                passport.createdAt().atOffset(ZoneOffset.UTC)
-        );
+        try {
+            jdbcTemplate.update(
+                    INSERT_PASSPORT,
+                    passport.id(),
+                    passport.snapshotId(),
+                    passport.currentHolderAccountId(),
+                    passport.status().name(),
+                    passport.version(),
+                    passport.createdAt().atOffset(ZoneOffset.UTC)
+            );
+        } catch (DuplicateKeyException exception) {
+            throw PassportException.alreadyIssued();
+        }
     }
 
     @Override
