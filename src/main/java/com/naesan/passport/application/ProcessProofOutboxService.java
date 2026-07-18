@@ -66,23 +66,26 @@ public class ProcessProofOutboxService {
         );
 
         transactionTemplate.executeWithoutResult(status ->
-                finalizeSuccess(claimedEvent, proofAnchor, receipt)
+                finalizeSuccess(claim, proofAnchor, receipt)
         );
         return true;
     }
 
     private void finalizeSuccess(
-            OutboxEvent claimedEvent,
+            OutboxClaim claim,
             ProofAnchor proofAnchor,
             ProofAnchorReceipt receipt
     ) {
         ProofAnchor confirmedProof = proofAnchor
                 .submit(receipt.externalReference(), receipt.anchoredAt())
                 .confirm(receipt.anchoredAt());
-        OutboxEvent succeededEvent = claimedEvent.succeed(receipt.anchoredAt());
+        OutboxEvent succeededEvent = claim.event().succeed(receipt.anchoredAt());
 
         boolean proofConfirmed = proofAnchorRepository.confirmPrepared(confirmedProof);
-        boolean eventCompleted = outboxEventRepository.completeClaimed(succeededEvent);
+        boolean eventCompleted = outboxEventRepository.completeClaimed(
+                claim,
+                succeededEvent
+        );
         if (!proofConfirmed || !eventCompleted) {
             throw new OutboxProcessingException(
                     "외부 증명 처리 결과를 일관되게 저장하지 못했습니다."

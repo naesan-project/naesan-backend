@@ -17,5 +17,8 @@ public interface OutboxEventRepository {
 
     Optional<OutboxClaim> claimNextDue(OutboxClaimRequest request);
 
-    boolean completeClaimed(OutboxEvent succeededEvent);
+    boolean completeClaimed(
+            OutboxClaim claim,
+            OutboxEvent succeededEvent
+    );
 }

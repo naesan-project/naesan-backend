@@ -278,8 +278,11 @@ class IssuePassportTransactionIntegrationTest {
         }
 
         @Override
-        public boolean completeClaimed(OutboxEvent succeededEvent) {
-            return delegate.completeClaimed(succeededEvent);
+        public boolean completeClaimed(
+                OutboxClaim claim,
+                OutboxEvent succeededEvent
+        ) {
+            return delegate.completeClaimed(claim, succeededEvent);
         }
     }
 

@@ -111,8 +111,15 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
             UPDATE outbox_events
             SET
                 status = ?,
-                updated_at = ?
-            WHERE id = ? AND status = 'CLAIMED'
+                updated_at = ?,
+                claim_token = NULL,
+                lease_until = NULL,
+                claimed_by = NULL,
+                claim_reason = NULL
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND fencing_version = ?
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -181,12 +188,17 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     }
 
     @Override
-    public boolean completeClaimed(OutboxEvent succeededEvent) {
+    public boolean completeClaimed(
+            OutboxClaim claim,
+            OutboxEvent succeededEvent
+    ) {
         int updatedRowCount = jdbcTemplate.update(
                 COMPLETE_CLAIMED,
                 succeededEvent.status().name(),
                 succeededEvent.updatedAt().atOffset(ZoneOffset.UTC),
-                succeededEvent.id()
+                succeededEvent.id(),
+                claim.claimToken(),
+                claim.fencingVersion()
         );
         return updatedRowCount == 1;
     }

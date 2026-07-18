@@ -184,6 +184,30 @@ class OutboxClaimJdbcRepositoryTest {
         assertThat(recoveredClaim.claimedBy()).isEqualTo("worker-2");
     }
 
+    @Test
+    @DisplayName("회수 전 stale claim은 새 claimant의 event를 완료할 수 없다")
+    void rejectsStaleClaimCompletion() {
+        repository.save(pendingEvent(CREATED_AT));
+        var staleClaim = repository.claimNextDue(request("worker-1")).orElseThrow();
+        jdbcTemplate.update(
+                "UPDATE outbox_events SET lease_until = clock_timestamp() - INTERVAL '1 second'"
+        );
+        var currentClaim = repository.claimNextDue(request("worker-2")).orElseThrow();
+        Instant completedAt = Instant.now();
+
+        boolean staleCompleted = repository.completeClaimed(
+                staleClaim,
+                staleClaim.event().succeed(completedAt)
+        );
+        boolean currentCompleted = repository.completeClaimed(
+                currentClaim,
+                currentClaim.event().succeed(completedAt)
+        );
+
+        assertThat(staleCompleted).isFalse();
+        assertThat(currentCompleted).isTrue();
+    }
+
     private OutboxEvent pendingEvent(Instant nextAttemptAt) {
         return OutboxEvent.restore(
                 UUID.randomUUID(),
