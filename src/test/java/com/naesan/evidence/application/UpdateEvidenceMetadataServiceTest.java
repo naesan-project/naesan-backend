@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -102,6 +103,15 @@ class UpdateEvidenceMetadataServiceTest {
         @Override
         public void update(PurchaseEvidence evidence) {
             this.evidence = evidence;
+        }
+
+        @Override
+        public List<PurchaseEvidence> findAllByOwnerAccountId(UUID ownerAccountId) {
+            return Optional.ofNullable(evidence)
+                    .filter(foundEvidence ->
+                            foundEvidence.ownerAccountId().equals(ownerAccountId))
+                    .stream()
+                    .toList();
         }
 
         @Override

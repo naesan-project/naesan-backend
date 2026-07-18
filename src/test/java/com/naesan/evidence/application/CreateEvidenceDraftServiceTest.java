@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -74,6 +75,14 @@ class CreateEvidenceDraftServiceTest {
         @Override
         public void update(PurchaseEvidence evidence) {
             this.savedEvidence = evidence;
+        }
+
+        @Override
+        public List<PurchaseEvidence> findAllByOwnerAccountId(UUID ownerAccountId) {
+            return Optional.ofNullable(savedEvidence)
+                    .filter(evidence -> evidence.ownerAccountId().equals(ownerAccountId))
+                    .stream()
+                    .toList();
         }
 
         @Override

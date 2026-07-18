@@ -2,6 +2,7 @@ package com.naesan.evidence.adapter.in.web;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,6 +24,7 @@ import com.naesan.evidence.application.AttachEvidenceFileService;
 import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.application.ConfirmEvidenceService;
+import com.naesan.evidence.application.ListEvidenceService;
 import com.naesan.evidence.application.UpdateEvidenceMetadataCommand;
 import com.naesan.evidence.application.UpdateEvidenceMetadataService;
 import com.naesan.evidence.domain.PurchaseEvidence;
@@ -33,17 +36,20 @@ import com.naesan.security.AuthenticatedAccount;
 @RequestMapping("/api/evidence")
 public class EvidenceApiController {
     private final CreateEvidenceDraftService createEvidenceDraftService;
+    private final ListEvidenceService listEvidenceService;
     private final AttachEvidenceFileService attachEvidenceFileService;
     private final UpdateEvidenceMetadataService updateEvidenceMetadataService;
     private final ConfirmEvidenceService confirmEvidenceService;
 
     public EvidenceApiController(
             CreateEvidenceDraftService createEvidenceDraftService,
+            ListEvidenceService listEvidenceService,
             AttachEvidenceFileService attachEvidenceFileService,
             UpdateEvidenceMetadataService updateEvidenceMetadataService,
             ConfirmEvidenceService confirmEvidenceService
     ) {
         this.createEvidenceDraftService = createEvidenceDraftService;
+        this.listEvidenceService = listEvidenceService;
         this.attachEvidenceFileService = attachEvidenceFileService;
         this.updateEvidenceMetadataService = updateEvidenceMetadataService;
         this.confirmEvidenceService = confirmEvidenceService;
@@ -68,6 +74,16 @@ public class EvidenceApiController {
         URI location = URI.create("/api/evidence/" + evidence.id());
         return ResponseEntity.created(location)
                 .body(EvidenceResponse.from(evidence));
+    }
+
+    @GetMapping
+    public List<EvidenceResponse> list(
+            @AuthenticationPrincipal AuthenticatedAccount account
+    ) {
+        return listEvidenceService.list(account.id())
+                .stream()
+                .map(EvidenceResponse::from)
+                .toList();
     }
 
     @PutMapping("/{evidenceId}/metadata")

@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -55,6 +56,25 @@ public class PurchaseEvidenceJdbcRepository implements PurchaseEvidenceRepositor
                 confirmed_at
             FROM purchase_evidence
             WHERE id = ?
+            """;
+    private static final String FIND_ALL_BY_OWNER_ACCOUNT_ID = """
+            SELECT
+                id,
+                owner_account_id,
+                merchant_name,
+                product_name,
+                serial_number,
+                purchased_at,
+                amount,
+                currency,
+                state,
+                version,
+                created_at,
+                updated_at,
+                confirmed_at
+            FROM purchase_evidence
+            WHERE owner_account_id = ?
+            ORDER BY created_at DESC, id DESC
             """;
     private static final String UPDATE_EVIDENCE = """
             UPDATE purchase_evidence
@@ -124,6 +144,15 @@ public class PurchaseEvidenceJdbcRepository implements PurchaseEvidenceRepositor
         if (updatedRowCount == 0) {
             throw EvidenceException.concurrentModification();
         }
+    }
+
+    @Override
+    public List<PurchaseEvidence> findAllByOwnerAccountId(UUID ownerAccountId) {
+        return jdbcTemplate.query(
+                FIND_ALL_BY_OWNER_ACCOUNT_ID,
+                this::mapEvidence,
+                ownerAccountId
+        );
     }
 
     @Override
