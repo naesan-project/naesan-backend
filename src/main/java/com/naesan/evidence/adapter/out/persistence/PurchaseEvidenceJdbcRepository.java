@@ -12,6 +12,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.naesan.evidence.application.EvidenceException;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
 import com.naesan.evidence.domain.EvidenceMetadata;
 import com.naesan.evidence.domain.PurchaseEvidence;
@@ -55,6 +56,21 @@ public class PurchaseEvidenceJdbcRepository implements PurchaseEvidenceRepositor
             FROM purchase_evidence
             WHERE id = ?
             """;
+    private static final String UPDATE_EVIDENCE = """
+            UPDATE purchase_evidence
+            SET
+                merchant_name = ?,
+                product_name = ?,
+                serial_number = ?,
+                purchased_at = ?,
+                amount = ?,
+                currency = ?,
+                state = ?,
+                version = ?,
+                updated_at = ?,
+                confirmed_at = ?
+            WHERE id = ? AND version = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -85,6 +101,29 @@ public class PurchaseEvidenceJdbcRepository implements PurchaseEvidenceRepositor
 
     private OffsetDateTime toOffsetDateTime(Instant instant) {
         return instant == null ? null : instant.atOffset(ZoneOffset.UTC);
+    }
+
+    @Override
+    public void update(PurchaseEvidence evidence) {
+        EvidenceMetadata metadata = evidence.metadata();
+        int updatedRowCount = jdbcTemplate.update(
+                UPDATE_EVIDENCE,
+                metadata.merchantName(),
+                metadata.productName(),
+                metadata.serialNumber(),
+                metadata.purchasedAt(),
+                metadata.amount(),
+                metadata.currency(),
+                evidence.state().name(),
+                evidence.version(),
+                evidence.updatedAt().atOffset(ZoneOffset.UTC),
+                toOffsetDateTime(evidence.confirmedAt()),
+                evidence.id(),
+                evidence.version() - 1
+        );
+        if (updatedRowCount == 0) {
+            throw EvidenceException.concurrentModification();
+        }
     }
 
     @Override

@@ -112,6 +112,22 @@ public final class PurchaseEvidence {
         );
     }
 
+    public PurchaseEvidence attachFile(Instant attachedAt) {
+        if (state != PurchaseEvidenceState.DRAFT) {
+            throw new IllegalStateException("현재 상태에서는 파일을 연결할 수 없습니다.");
+        }
+        return new PurchaseEvidence(
+                id,
+                ownerAccountId,
+                metadata,
+                PurchaseEvidenceState.FILE_ATTACHED,
+                version + 1,
+                createdAt,
+                attachedAt,
+                null
+        );
+    }
+
     public UUID id() {
         return id;
     }

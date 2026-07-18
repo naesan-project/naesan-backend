@@ -72,6 +72,11 @@ class CreateEvidenceDraftServiceTest {
         }
 
         @Override
+        public void update(PurchaseEvidence evidence) {
+            this.savedEvidence = evidence;
+        }
+
+        @Override
         public Optional<PurchaseEvidence> findById(UUID evidenceId) {
             return Optional.ofNullable(savedEvidence)
                     .filter(evidence -> evidence.id().equals(evidenceId));

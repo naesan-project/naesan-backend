@@ -38,6 +38,24 @@ class PurchaseEvidenceTest {
     }
 
     @Test
+    @DisplayName("파일을 연결하면 FILE_ATTACHED 상태와 version을 갱신한다")
+    void attachesFile() {
+        PurchaseEvidence draft = PurchaseEvidence.createDraft(
+                EVIDENCE_ID,
+                OWNER_ACCOUNT_ID,
+                metadata(),
+                CREATED_AT
+        );
+        Instant attachedAt = CREATED_AT.plusSeconds(1);
+
+        PurchaseEvidence attached = draft.attachFile(attachedAt);
+
+        assertThat(attached.state()).isEqualTo(PurchaseEvidenceState.FILE_ATTACHED);
+        assertThat(attached.version()).isEqualTo(1);
+        assertThat(attached.updatedAt()).isEqualTo(attachedAt);
+    }
+
+    @Test
     @DisplayName("음수 version을 가진 구매 증빙을 거절한다")
     void rejectsNegativeVersion() {
         assertThatThrownBy(() -> PurchaseEvidence.restore(

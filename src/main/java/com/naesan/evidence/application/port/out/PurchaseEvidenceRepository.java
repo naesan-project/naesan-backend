@@ -9,5 +9,7 @@ public interface PurchaseEvidenceRepository {
 
     void save(PurchaseEvidence evidence);
 
+    void update(PurchaseEvidence evidence);
+
     Optional<PurchaseEvidence> findById(UUID evidenceId);
 }
