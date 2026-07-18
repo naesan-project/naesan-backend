@@ -2,6 +2,8 @@ package com.naesan.passport.application;
 
 import java.util.HexFormat;
 import java.util.Objects;
+import java.time.Duration;
+import java.util.UUID;
 
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -11,6 +13,7 @@ import com.naesan.passport.application.port.out.ProofAnchorPort;
 import com.naesan.passport.application.port.out.ProofAnchorReceipt;
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
 import com.naesan.passport.domain.OutboxEvent;
+import com.naesan.passport.domain.OutboxClaim;
 import com.naesan.passport.domain.ProofAnchor;
 
 public class ProcessProofOutboxService {
@@ -18,26 +21,36 @@ public class ProcessProofOutboxService {
     private final ProofAnchorRepository proofAnchorRepository;
     private final ProofAnchorPort proofAnchorPort;
     private final TransactionTemplate transactionTemplate;
+    private final Duration leaseDuration;
 
     public ProcessProofOutboxService(
             OutboxEventRepository outboxEventRepository,
             ProofAnchorRepository proofAnchorRepository,
             ProofAnchorPort proofAnchorPort,
-            TransactionTemplate transactionTemplate
+            TransactionTemplate transactionTemplate,
+            Duration leaseDuration
     ) {
         this.outboxEventRepository = Objects.requireNonNull(outboxEventRepository);
         this.proofAnchorRepository = Objects.requireNonNull(proofAnchorRepository);
         this.proofAnchorPort = Objects.requireNonNull(proofAnchorPort);
         this.transactionTemplate = Objects.requireNonNull(transactionTemplate);
+        this.leaseDuration = Objects.requireNonNull(leaseDuration);
     }
 
     public boolean processNext(String workerId) {
-        OutboxEvent claimedEvent = transactionTemplate.execute(status ->
-                outboxEventRepository.claimNextPending(workerId).orElse(null)
+        OutboxClaim claim = transactionTemplate.execute(status ->
+                outboxEventRepository.claimNextDue(
+                        new OutboxClaimRequest(
+                                workerId,
+                                UUID.randomUUID(),
+                                leaseDuration
+                        )
+                ).orElse(null)
         );
-        if (claimedEvent == null) {
+        if (claim == null) {
             return false;
         }
+        OutboxEvent claimedEvent = claim.event();
 
         ProofAnchor proofAnchor = proofAnchorRepository.findById(
                         claimedEvent.proofAnchorId()

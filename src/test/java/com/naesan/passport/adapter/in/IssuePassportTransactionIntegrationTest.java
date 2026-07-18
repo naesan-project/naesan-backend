@@ -32,11 +32,13 @@ import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.adapter.out.persistence.OutboxEventJdbcRepository;
 import com.naesan.passport.adapter.out.security.SecureRandomAnchorSaltGenerator;
 import com.naesan.passport.application.IssuePassportService;
+import com.naesan.passport.application.OutboxClaimRequest;
 import com.naesan.passport.application.PassportErrorCode;
 import com.naesan.passport.application.PassportException;
 import com.naesan.passport.application.port.out.AnchorSaltGenerator;
 import com.naesan.passport.application.port.out.OutboxEventRepository;
 import com.naesan.passport.domain.OutboxEvent;
+import com.naesan.passport.domain.OutboxClaim;
 
 @SpringBootTest
 @Import({
@@ -271,8 +273,8 @@ class IssuePassportTransactionIntegrationTest {
         }
 
         @Override
-        public Optional<OutboxEvent> claimNextPending(String workerId) {
-            return delegate.claimNextPending(workerId);
+        public Optional<OutboxClaim> claimNextDue(OutboxClaimRequest request) {
+            return delegate.claimNextDue(request);
         }
 
         @Override

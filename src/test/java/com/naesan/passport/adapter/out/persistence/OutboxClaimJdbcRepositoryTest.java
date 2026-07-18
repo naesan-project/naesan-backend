@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.Duration;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +19,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.naesan.TestcontainersConfiguration;
+import com.naesan.passport.application.OutboxClaimRequest;
 import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.OutboxEventStatus;
 
@@ -131,15 +133,31 @@ class OutboxClaimJdbcRepositoryTest {
     void claimsDuePendingEventOnce() {
         OutboxEvent pendingEvent = pendingEvent(CREATED_AT);
         repository.save(pendingEvent);
+        UUID claimToken = UUID.randomUUID();
 
-        assertThat(repository.claimNextPending("worker-1"))
+        assertThat(repository.claimNextDue(new OutboxClaimRequest(
+                "worker-1",
+                claimToken,
+                Duration.ofSeconds(30)
+        )))
                 .get()
-                .satisfies(claimedEvent -> {
-                    assertThat(claimedEvent.id()).isEqualTo(pendingEvent.id());
-                    assertThat(claimedEvent.status()).isEqualTo(OutboxEventStatus.CLAIMED);
-                    assertThat(claimedEvent.attemptCount()).isOne();
+                .satisfies(claim -> {
+                    assertThat(claim.event().id()).isEqualTo(pendingEvent.id());
+                    assertThat(claim.event().status())
+                            .isEqualTo(OutboxEventStatus.CLAIMED);
+                    assertThat(claim.event().attemptCount()).isOne();
+                    assertThat(claim.claimToken()).isEqualTo(claimToken);
+                    assertThat(claim.fencingVersion()).isOne();
                 });
-        assertThat(repository.claimNextPending("worker-2")).isEmpty();
+        assertThat(repository.claimNextDue(request("worker-2"))).isEmpty();
+    }
+
+    private OutboxClaimRequest request(String workerId) {
+        return new OutboxClaimRequest(
+                workerId,
+                UUID.randomUUID(),
+                Duration.ofSeconds(30)
+        );
     }
 
     @Test
@@ -147,7 +165,23 @@ class OutboxClaimJdbcRepositoryTest {
     void skipsEventBeforeDueTime() {
         repository.save(pendingEvent(Instant.parse("2099-01-01T00:00:00Z")));
 
-        assertThat(repository.claimNextPending("worker-1")).isEmpty();
+        assertThat(repository.claimNextDue(request("worker-1"))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("만료된 claim은 새 token과 증가한 fencing version으로 회수한다")
+    void recoversExpiredClaim() {
+        repository.save(pendingEvent(CREATED_AT));
+        var firstClaim = repository.claimNextDue(request("worker-1")).orElseThrow();
+        jdbcTemplate.update(
+                "UPDATE outbox_events SET lease_until = clock_timestamp() - INTERVAL '1 second'"
+        );
+
+        var recoveredClaim = repository.claimNextDue(request("worker-2")).orElseThrow();
+
+        assertThat(recoveredClaim.claimToken()).isNotEqualTo(firstClaim.claimToken());
+        assertThat(recoveredClaim.fencingVersion()).isEqualTo(2);
+        assertThat(recoveredClaim.claimedBy()).isEqualTo("worker-2");
     }
 
     private OutboxEvent pendingEvent(Instant nextAttemptAt) {

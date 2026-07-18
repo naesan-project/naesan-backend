@@ -1,7 +1,9 @@
 package com.naesan.passport.adapter.in;
 
 import java.time.Clock;
+import java.time.Duration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -30,13 +32,16 @@ public class PassportApplicationConfiguration {
             OutboxEventRepository outboxEventRepository,
             ProofAnchorRepository proofAnchorRepository,
             ProofAnchorPort proofAnchorPort,
-            PlatformTransactionManager transactionManager
+            PlatformTransactionManager transactionManager,
+            @Value("${naesan.proof.worker.lease-duration}")
+            Duration leaseDuration
     ) {
         return new ProcessProofOutboxService(
                 outboxEventRepository,
                 proofAnchorRepository,
                 proofAnchorPort,
-                new TransactionTemplate(transactionManager)
+                new TransactionTemplate(transactionManager),
+                leaseDuration
         );
     }
 

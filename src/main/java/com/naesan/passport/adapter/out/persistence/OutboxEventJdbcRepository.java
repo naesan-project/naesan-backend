@@ -11,6 +11,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.naesan.passport.application.port.out.OutboxEventRepository;
+import com.naesan.passport.application.OutboxClaimRequest;
+import com.naesan.passport.domain.OutboxClaim;
+import com.naesan.passport.domain.OutboxClaimReason;
 import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.OutboxEventStatus;
 
@@ -52,12 +55,17 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_PROOF_ANCHOR_ID =
             SELECT_COLUMNS + " WHERE proof_anchor_id = ?";
-    private static final String CLAIM_NEXT_PENDING = """
+    private static final String CLAIM_NEXT_DUE = """
             WITH next_event AS (
-                SELECT id
+                SELECT id, status, claim_reason
                 FROM outbox_events
-                WHERE status = 'PENDING'
-                  AND next_attempt_at <= clock_timestamp()
+                WHERE (
+                    status IN ('PENDING', 'RETRY_WAIT', 'RECONCILE_PENDING')
+                    AND next_attempt_at <= clock_timestamp()
+                ) OR (
+                    status = 'CLAIMED'
+                    AND lease_until < clock_timestamp()
+                )
                 ORDER BY next_attempt_at, created_at, id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
@@ -67,6 +75,16 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 status = 'CLAIMED',
                 attempt_count = event.attempt_count + 1,
                 claimed_by = ?,
+                claim_token = ?,
+                fencing_version = event.fencing_version + 1,
+                lease_until = clock_timestamp() + (? * INTERVAL '1 millisecond'),
+                claim_reason = CASE
+                    WHEN next_event.status = 'RECONCILE_PENDING'
+                        THEN 'RECONCILIATION'
+                    WHEN next_event.status = 'CLAIMED'
+                        THEN next_event.claim_reason
+                    ELSE 'SUBMISSION'
+                END,
                 updated_at = clock_timestamp()
             FROM next_event
             WHERE event.id = next_event.id
@@ -82,7 +100,12 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 event.attempt_count,
                 event.next_attempt_at,
                 event.created_at,
-                event.updated_at
+                event.updated_at,
+                event.claim_token,
+                event.fencing_version,
+                event.lease_until,
+                event.claimed_by,
+                event.claim_reason
             """;
     private static final String COMPLETE_CLAIMED = """
             UPDATE outbox_events
@@ -134,13 +157,27 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
     }
 
     @Override
-    public Optional<OutboxEvent> claimNextPending(String workerId) {
-        if (workerId == null || workerId.isBlank()) {
-            throw new IllegalArgumentException("Worker ID는 비어 있을 수 없습니다.");
-        }
-        return jdbcTemplate.query(CLAIM_NEXT_PENDING, this::mapOutboxEvent, workerId)
+    public Optional<OutboxClaim> claimNextDue(OutboxClaimRequest request) {
+        return jdbcTemplate.query(
+                        CLAIM_NEXT_DUE,
+                        this::mapClaim,
+                        request.workerId(),
+                        request.claimToken(),
+                        request.leaseDuration().toMillis()
+                )
                 .stream()
                 .findFirst();
+    }
+
+    private OutboxClaim mapClaim(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new OutboxClaim(
+                mapOutboxEvent(resultSet, rowNumber),
+                resultSet.getObject("claim_token", UUID.class),
+                resultSet.getLong("fencing_version"),
+                resultSet.getObject("lease_until", OffsetDateTime.class).toInstant(),
+                resultSet.getString("claimed_by"),
+                OutboxClaimReason.valueOf(resultSet.getString("claim_reason"))
+        );
     }
 
     @Override
