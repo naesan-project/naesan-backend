@@ -13,6 +13,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
 import jakarta.servlet.http.Cookie;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +32,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.MvcResult;
@@ -33,6 +44,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.account.application.RegisterAccountService;
 import com.naesan.account.domain.Account;
+import com.naesan.security.AuthenticatedAccount;
 
 @Import(TestcontainersConfiguration.class)
 @AutoConfigureMockMvc
@@ -50,16 +62,19 @@ class AccountSessionApiIntegrationTest {
     private final MockMvc mockMvc;
     private final RegisterAccountService registerAccountService;
     private final JdbcTemplate jdbcTemplate;
+    private final Clock clock;
 
     @Autowired
     AccountSessionApiIntegrationTest(
             MockMvc mockMvc,
             RegisterAccountService registerAccountService,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            Clock clock
     ) {
         this.mockMvc = mockMvc;
         this.registerAccountService = registerAccountService;
         this.jdbcTemplate = jdbcTemplate;
+        this.clock = clock;
     }
 
     @BeforeEach
@@ -254,6 +269,40 @@ class AccountSessionApiIntegrationTest {
                         HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
                         "true"
                 ));
+    }
+
+    @Test
+    @DisplayName("로그인 후 12시간이 지난 session은 401로 만료한다")
+    void rejectsSessionAfterAbsoluteTimeout() throws Exception {
+        MockHttpSession session = expiredSession();
+
+        mockMvc.perform(get(CURRENT_SESSION_API).session(session))
+                .andExpect(status().isUnauthorized())
+                .andExpect(cookie().maxAge(CSRF_COOKIE, 0));
+
+        assertThat(session.isInvalid()).isTrue();
+    }
+
+    private MockHttpSession expiredSession() {
+        AuthenticatedAccount principal = new AuthenticatedAccount(
+                UUID.randomUUID(),
+                EMAIL,
+                Instant.now(clock).minus(Duration.ofHours(13))
+        );
+        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
+                principal,
+                null,
+                List.of()
+        );
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+
+        MockHttpSession session = new MockHttpSession();
+        session.setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                securityContext
+        );
+        return session;
     }
 
     private ResultActions login(

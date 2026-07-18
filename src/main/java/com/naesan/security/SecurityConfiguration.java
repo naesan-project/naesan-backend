@@ -1,5 +1,7 @@
 package com.naesan.security;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +26,7 @@ import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
@@ -33,7 +36,10 @@ public class SecurityConfiguration {
             HttpSecurity http,
             CookieCsrfTokenRepository csrfTokenRepository,
             SecurityContextRepository securityContextRepository,
-            SessionAuthenticationStrategy sessionAuthenticationStrategy
+            SessionAuthenticationStrategy sessionAuthenticationStrategy,
+            Clock clock,
+            @Value("${naesan.security.session.absolute-timeout}")
+            Duration absoluteSessionTimeout
     ) throws Exception {
         http
                 .cors(Customizer.withDefaults())
@@ -67,7 +73,15 @@ public class SecurityConfiguration {
                 )
                 .requestCache(requestCache -> requestCache.disable())
                 .formLogin(formLogin -> formLogin.disable())
-                .httpBasic(httpBasic -> httpBasic.disable());
+                .httpBasic(httpBasic -> httpBasic.disable())
+                .addFilterAfter(
+                        new AbsoluteSessionTimeoutFilter(
+                                clock,
+                                absoluteSessionTimeout,
+                                csrfTokenRepository
+                        ),
+                        CorsFilter.class
+                );
 
         return http.build();
     }
@@ -113,11 +127,13 @@ public class SecurityConfiguration {
     @Bean
     AccountSessionManager accountSessionManager(
             SecurityContextRepository securityContextRepository,
-            SessionAuthenticationStrategy sessionAuthenticationStrategy
+            SessionAuthenticationStrategy sessionAuthenticationStrategy,
+            Clock clock
     ) {
         return new AccountSessionManager(
                 securityContextRepository,
-                sessionAuthenticationStrategy
+                sessionAuthenticationStrategy,
+                clock
         );
     }
 }

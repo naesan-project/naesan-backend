@@ -1,5 +1,7 @@
 package com.naesan.security;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
@@ -18,14 +20,17 @@ import com.naesan.account.domain.Account;
 public class AccountSessionManager {
     private final SecurityContextRepository securityContextRepository;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
+    private final Clock clock;
 
     public AccountSessionManager(
             SecurityContextRepository securityContextRepository,
-            SessionAuthenticationStrategy sessionAuthenticationStrategy
+            SessionAuthenticationStrategy sessionAuthenticationStrategy,
+            Clock clock
     ) {
         this.securityContextRepository = Objects.requireNonNull(securityContextRepository);
         this.sessionAuthenticationStrategy =
                 Objects.requireNonNull(sessionAuthenticationStrategy);
+        this.clock = Objects.requireNonNull(clock);
     }
 
     public AuthenticatedAccount startAuthenticatedSession(
@@ -33,7 +38,10 @@ public class AccountSessionManager {
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        AuthenticatedAccount principal = AuthenticatedAccount.from(account);
+        AuthenticatedAccount principal = AuthenticatedAccount.from(
+                account,
+                Instant.now(clock)
+        );
         Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
                 principal,
                 null,
