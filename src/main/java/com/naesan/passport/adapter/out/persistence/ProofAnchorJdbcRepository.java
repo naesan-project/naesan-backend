@@ -61,6 +61,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 updated_at = ?
             WHERE id = ? AND state = 'PREPARED'
             """;
+    private static final String UPDATE_RECONCILE_PENDING = """
+            UPDATE proof_anchors
+            SET
+                state = ?,
+                external_reference = ?,
+                updated_at = ?
+            WHERE id = ? AND state = 'RECONCILE_PENDING'
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -117,6 +125,32 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
         int updatedRowCount = jdbcTemplate.update(
                 MARK_RECONCILE_PENDING,
                 proofAnchor.state().name(),
+                proofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
+                proofAnchor.id()
+        );
+        return updatedRowCount == 1;
+    }
+
+    @Override
+    public boolean confirmReconciled(ProofAnchor proofAnchor) {
+        return updateReconcilePending(proofAnchor);
+    }
+
+    @Override
+    public boolean resumePrepared(ProofAnchor proofAnchor) {
+        return updateReconcilePending(proofAnchor);
+    }
+
+    @Override
+    public boolean markManualReview(ProofAnchor proofAnchor) {
+        return updateReconcilePending(proofAnchor);
+    }
+
+    private boolean updateReconcilePending(ProofAnchor proofAnchor) {
+        int updatedRowCount = jdbcTemplate.update(
+                UPDATE_RECONCILE_PENDING,
+                proofAnchor.state().name(),
+                proofAnchor.externalReference(),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.id()
         );

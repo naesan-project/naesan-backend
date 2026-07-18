@@ -178,6 +178,64 @@ public final class ProofAnchor {
         );
     }
 
+    public ProofAnchor confirmReconciled(
+            String reconciledExternalReference,
+            Instant confirmedAt
+    ) {
+        if (state != ProofAnchorState.RECONCILE_PENDING) {
+            throw new IllegalStateException("대사 대기 중인 외부 증명만 확정할 수 있습니다.");
+        }
+        if (reconciledExternalReference == null
+                || reconciledExternalReference.isBlank()) {
+            throw new IllegalArgumentException("외부 증명 참조는 비어 있을 수 없습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.CONFIRMED,
+                reconciledExternalReference,
+                createdAt,
+                confirmedAt
+        );
+    }
+
+    public ProofAnchor resumeSubmission(Instant changedAt) {
+        if (state != ProofAnchorState.RECONCILE_PENDING) {
+            throw new IllegalStateException("대사 대기 중인 외부 증명만 제출 대기로 되돌릴 수 있습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.PREPARED,
+                null,
+                createdAt,
+                changedAt
+        );
+    }
+
+    public ProofAnchor requireManualReview(Instant changedAt) {
+        if (state != ProofAnchorState.RECONCILE_PENDING) {
+            throw new IllegalStateException("대사 대기 중인 외부 증명만 수동 검토로 전환할 수 있습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.MANUAL_REVIEW,
+                externalReference,
+                createdAt,
+                changedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

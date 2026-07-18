@@ -25,6 +25,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
+import com.naesan.passport.application.port.out.ProofProviderCapabilities;
 import com.naesan.passport.support.ControllableProofAnchorAdapter;
 import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
 
@@ -186,6 +187,83 @@ class ProcessProofOutboxIntegrationTest {
         assertThat(outboxStatus()).isEqualTo("RECONCILE_PENDING");
         assertThat(proofState()).isEqualTo("RECONCILE_PENDING");
         assertThat(outboxError()).containsExactly("AMBIGUOUS", "RESPONSE_LOST");
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("응답 유실 뒤 lookup으로 기존 성공을 찾아 재제출 없이 완료한다")
+    void reconcilesAmbiguousSuccessWithoutResubmission() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
+        processProofOutboxService.processNext("worker-1");
+
+        boolean reconciled = processProofOutboxService.processNext("worker-2");
+
+        assertThat(reconciled).isTrue();
+        assertThat(proofState()).isEqualTo("CONFIRMED");
+        assertThat(outboxStatus()).isEqualTo("SUCCEEDED");
+        assertThat(proofAnchorPort.lookupCount()).isOne();
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("lookup이 미제출을 확정하면 같은 commitment의 재제출을 예약한다")
+    void schedulesSameCommitmentAfterConfirmedAbsence() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
+        processProofOutboxService.processNext("worker-1");
+        proofAnchorPort.forgetStoredReceipts();
+
+        boolean reconciled = processProofOutboxService.processNext("worker-2");
+
+        assertThat(reconciled).isTrue();
+        assertThat(proofState()).isEqualTo("PREPARED");
+        assertThat(outboxStatus()).isEqualTo("RETRY_WAIT");
+        assertThat(outboxError()).containsExactly(
+                "RETRYABLE",
+                "ANCHOR_NOT_FOUND"
+        );
+        assertThat(proofAnchorPort.lookupCount()).isOne();
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("lookup을 지원하지 않으면 자동 재제출 없이 수동 검토로 멈춘다")
+    void stopsForManualReviewWithoutLookupCapability() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
+        processProofOutboxService.processNext("worker-1");
+        proofAnchorPort.setCapabilities(
+                new ProofProviderCapabilities(false, true)
+        );
+
+        boolean reviewed = processProofOutboxService.processNext("worker-2");
+
+        assertThat(reviewed).isTrue();
+        assertThat(proofState()).isEqualTo("MANUAL_REVIEW");
+        assertThat(outboxStatus()).isEqualTo("MANUAL_REVIEW");
+        assertThat(outboxError()).containsExactly(
+                "AMBIGUOUS",
+                "LOOKUP_UNSUPPORTED"
+        );
+        assertThat(proofAnchorPort.lookupCount()).isZero();
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("lookup 결과도 불명확하면 자동 재제출 없이 수동 검토로 멈춘다")
+    void stopsForManualReviewAfterUncertainLookup() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
+        processProofOutboxService.processNext("worker-1");
+        proofAnchorPort.failLookup();
+
+        boolean reviewed = processProofOutboxService.processNext("worker-2");
+
+        assertThat(reviewed).isTrue();
+        assertThat(proofState()).isEqualTo("MANUAL_REVIEW");
+        assertThat(outboxStatus()).isEqualTo("MANUAL_REVIEW");
+        assertThat(outboxError()).containsExactly(
+                "AMBIGUOUS",
+                "LOOKUP_UNAVAILABLE"
+        );
+        assertThat(proofAnchorPort.lookupCount()).isOne();
         assertThat(proofAnchorPort.submitCount()).isOne();
     }
 

@@ -20,7 +20,11 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
     private final Map<String, ProofAnchorReceipt> receiptsByCommitment =
             new ConcurrentHashMap<>();
     private final AtomicInteger submitCount = new AtomicInteger();
+    private final AtomicInteger lookupCount = new AtomicInteger();
     private volatile ProofOutcome outcome = ProofOutcome.SUCCESS;
+    private volatile ProofProviderCapabilities capabilities =
+            new ProofProviderCapabilities(true, true);
+    private volatile boolean lookupFailure;
     private volatile boolean transactionActiveDuringSubmit;
 
     public ControllableProofAnchorAdapter(Clock clock) {
@@ -31,15 +35,34 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         this.outcome = outcome;
     }
 
+    public void setCapabilities(ProofProviderCapabilities capabilities) {
+        this.capabilities = capabilities;
+    }
+
+    public void failLookup() {
+        lookupFailure = true;
+    }
+
+    public void forgetStoredReceipts() {
+        receiptsByCommitment.clear();
+    }
+
     public void reset() {
         receiptsByCommitment.clear();
         submitCount.set(0);
+        lookupCount.set(0);
         outcome = ProofOutcome.SUCCESS;
+        capabilities = new ProofProviderCapabilities(true, true);
+        lookupFailure = false;
         transactionActiveDuringSubmit = false;
     }
 
     public int submitCount() {
         return submitCount.get();
+    }
+
+    public int lookupCount() {
+        return lookupCount.get();
     }
 
     public boolean transactionActiveDuringSubmit() {
@@ -48,7 +71,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
 
     @Override
     public ProofProviderCapabilities capabilities() {
-        return new ProofProviderCapabilities(true, true);
+        return capabilities;
     }
 
     @Override
@@ -88,6 +111,13 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
 
     @Override
     public Optional<ProofAnchorReceipt> lookup(String commitment) {
+        lookupCount.incrementAndGet();
+        if (lookupFailure) {
+            throw new ProofProviderException(
+                    ProofFailureType.AMBIGUOUS,
+                    "LOOKUP_UNAVAILABLE"
+            );
+        }
         return Optional.ofNullable(receiptsByCommitment.get(commitment));
     }
 

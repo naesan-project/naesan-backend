@@ -311,6 +311,14 @@ class IssuePassportTransactionIntegrationTest {
         ) {
             return delegate.scheduleReconciliation(claim, failure);
         }
+
+        @Override
+        public boolean moveToManualReview(
+                OutboxClaim claim,
+                ProofProviderException failure
+        ) {
+            return delegate.moveToManualReview(claim, failure);
+        }
     }
 
     static final class SynchronizingAnchorSaltGenerator implements AnchorSaltGenerator {

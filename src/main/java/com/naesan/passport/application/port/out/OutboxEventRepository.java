@@ -38,4 +38,9 @@ public interface OutboxEventRepository {
             OutboxClaim claim,
             ProofProviderException failure
     );
+
+    boolean moveToManualReview(
+            OutboxClaim claim,
+            ProofProviderException failure
+    );
 }

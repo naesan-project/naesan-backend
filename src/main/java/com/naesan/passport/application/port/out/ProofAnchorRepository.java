@@ -16,4 +16,10 @@ public interface ProofAnchorRepository {
     boolean confirmPrepared(ProofAnchor confirmedProofAnchor);
 
     boolean markReconcilePending(ProofAnchor proofAnchor);
+
+    boolean confirmReconciled(ProofAnchor proofAnchor);
+
+    boolean resumePrepared(ProofAnchor proofAnchor);
+
+    boolean markManualReview(ProofAnchor proofAnchor);
 }
