@@ -6,6 +6,8 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+
 import com.naesan.passport.application.port.out.ProofAnchorCommand;
 import com.naesan.passport.application.port.out.ProofAnchorPort;
 import com.naesan.passport.application.port.out.ProofAnchorReceipt;
@@ -19,6 +21,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
             new ConcurrentHashMap<>();
     private final AtomicInteger submitCount = new AtomicInteger();
     private volatile ProofOutcome outcome = ProofOutcome.SUCCESS;
+    private volatile boolean transactionActiveDuringSubmit;
 
     public ControllableProofAnchorAdapter(Clock clock) {
         this.clock = clock;
@@ -28,8 +31,19 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         this.outcome = outcome;
     }
 
+    public void reset() {
+        receiptsByCommitment.clear();
+        submitCount.set(0);
+        outcome = ProofOutcome.SUCCESS;
+        transactionActiveDuringSubmit = false;
+    }
+
     public int submitCount() {
         return submitCount.get();
+    }
+
+    public boolean transactionActiveDuringSubmit() {
+        return transactionActiveDuringSubmit;
     }
 
     @Override
@@ -39,6 +53,8 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
 
     @Override
     public ProofAnchorReceipt submit(ProofAnchorCommand command) {
+        transactionActiveDuringSubmit =
+                TransactionSynchronizationManager.isActualTransactionActive();
         submitCount.incrementAndGet();
         return switch (outcome) {
             case SUCCESS -> storeReceipt(command.commitment());

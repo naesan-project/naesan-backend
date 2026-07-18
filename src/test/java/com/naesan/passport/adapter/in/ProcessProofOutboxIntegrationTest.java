@@ -5,10 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -21,15 +21,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
-import com.naesan.passport.application.port.out.ProofAnchorCommand;
-import com.naesan.passport.application.port.out.ProofAnchorPort;
-import com.naesan.passport.application.port.out.ProofAnchorReceipt;
-import com.naesan.passport.application.port.out.ProofProviderCapabilities;
+import com.naesan.passport.application.port.out.ProofProviderException;
+import com.naesan.passport.support.ControllableProofAnchorAdapter;
+import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
 
 @SpringBootTest
 @Import({
@@ -48,14 +46,14 @@ class ProcessProofOutboxIntegrationTest {
 
     private final IssuePassportService issuePassportService;
     private final ProcessProofOutboxService processProofOutboxService;
-    private final RecordingProofAnchorPort proofAnchorPort;
+    private final ControllableProofAnchorAdapter proofAnchorPort;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     ProcessProofOutboxIntegrationTest(
             IssuePassportService issuePassportService,
             ProcessProofOutboxService processProofOutboxService,
-            RecordingProofAnchorPort proofAnchorPort,
+            ControllableProofAnchorAdapter proofAnchorPort,
             JdbcTemplate jdbcTemplate
     ) {
         this.issuePassportService = issuePassportService;
@@ -66,7 +64,7 @@ class ProcessProofOutboxIntegrationTest {
 
     @BeforeEach
     void prepareIssuedPassport() {
-        proofAnchorPort.succeed();
+        proofAnchorPort.reset();
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
         jdbcTemplate.update("DELETE FROM ownership_history");
@@ -135,15 +133,30 @@ class ProcessProofOutboxIntegrationTest {
     @Test
     @DisplayName("외부 호출 실패는 ACTIVE Passport를 rollback하지 않는다")
     void keepsPassportActiveWhenExternalCallFails() {
-        proofAnchorPort.fail();
+        proofAnchorPort.setOutcome(ProofOutcome.RETRYABLE_FAILURE);
 
         assertThatThrownBy(() ->
                 processProofOutboxService.processNext("worker-1")
-        ).isInstanceOf(InjectedProofFailure.class);
+        ).isInstanceOf(ProofProviderException.class);
 
         assertThat(passportStatus()).isEqualTo("ACTIVE");
         assertThat(proofState()).isEqualTo("PREPARED");
         assertThat(outboxStatus()).isEqualTo("CLAIMED");
+        assertThat(processProofOutboxService.processNext("worker-2")).isFalse();
+    }
+
+    @Test
+    @DisplayName("Baseline은 외부 성공 후 응답 유실도 CLAIMED에 고착시킨다")
+    void leavesAmbiguousSuccessClaimed() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);
+
+        assertThatThrownBy(() ->
+                processProofOutboxService.processNext("worker-1")
+        ).isInstanceOf(ProofProviderException.class);
+
+        assertThat(outboxStatus()).isEqualTo("CLAIMED");
+        assertThat(proofAnchorPort.submitCount()).isOne();
+        assertThat(processProofOutboxService.processNext("worker-2")).isFalse();
     }
 
     private String passportStatus() {
@@ -172,52 +185,8 @@ class ProcessProofOutboxIntegrationTest {
 
         @Bean
         @Primary
-        RecordingProofAnchorPort recordingProofAnchorPort() {
-            return new RecordingProofAnchorPort();
+        ControllableProofAnchorAdapter controllableProofAnchorAdapter() {
+            return new ControllableProofAnchorAdapter(Clock.systemUTC());
         }
-    }
-
-    static final class RecordingProofAnchorPort implements ProofAnchorPort {
-        private boolean failing;
-        private boolean transactionActiveDuringSubmit;
-
-        void succeed() {
-            failing = false;
-            transactionActiveDuringSubmit = false;
-        }
-
-        void fail() {
-            failing = true;
-        }
-
-        boolean transactionActiveDuringSubmit() {
-            return transactionActiveDuringSubmit;
-        }
-
-        @Override
-        public ProofProviderCapabilities capabilities() {
-            return new ProofProviderCapabilities(true, true);
-        }
-
-        @Override
-        public ProofAnchorReceipt submit(ProofAnchorCommand command) {
-            transactionActiveDuringSubmit =
-                    TransactionSynchronizationManager.isActualTransactionActive();
-            if (failing) {
-                throw new InjectedProofFailure();
-            }
-            return new ProofAnchorReceipt(
-                    "recording:" + command.commitment(),
-                    Instant.now()
-            );
-        }
-
-        @Override
-        public Optional<ProofAnchorReceipt> lookup(String commitment) {
-            return Optional.empty();
-        }
-    }
-
-    static final class InjectedProofFailure extends RuntimeException {
     }
 }
