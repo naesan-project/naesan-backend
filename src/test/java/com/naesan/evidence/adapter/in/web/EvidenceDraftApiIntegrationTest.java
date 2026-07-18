@@ -49,6 +49,8 @@ class EvidenceDraftApiIntegrationTest {
 
     @BeforeEach
     void prepareOwnerAccount() {
+        jdbcTemplate.update("DELETE FROM evidence_snapshots");
+        jdbcTemplate.update("DELETE FROM evidence_files");
         jdbcTemplate.update("DELETE FROM purchase_evidence");
         jdbcTemplate.update("DELETE FROM accounts");
         jdbcTemplate.update(

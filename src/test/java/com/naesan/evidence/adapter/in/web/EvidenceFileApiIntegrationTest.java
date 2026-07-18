@@ -35,6 +35,8 @@ import com.naesan.security.AuthenticatedAccount;
 class EvidenceFileApiIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("b6245934-942e-4d59-b80c-4a368078b920");
+    private static final UUID OTHER_ACCOUNT_ID =
+            UUID.fromString("8278dc4c-b50d-48bf-b083-63c3bf1213f2");
     private static final UUID EVIDENCE_ID =
             UUID.fromString("796647f4-442d-4eed-a51c-ff35734facdd");
     private static final String BCRYPT_HASH = "$2a$12$" + "a".repeat(53);
@@ -50,6 +52,7 @@ class EvidenceFileApiIntegrationTest {
 
     @BeforeEach
     void prepareDraft() {
+        jdbcTemplate.update("DELETE FROM evidence_snapshots");
         jdbcTemplate.update("DELETE FROM evidence_files");
         jdbcTemplate.update("DELETE FROM purchase_evidence");
         jdbcTemplate.update("DELETE FROM accounts");
@@ -60,6 +63,15 @@ class EvidenceFileApiIntegrationTest {
                 VALUES (?, 'file-api@example.com', ?, 'ACTIVE', ?)
                 """,
                 OWNER_ACCOUNT_ID,
+                BCRYPT_HASH,
+                now.atOffset(ZoneOffset.UTC)
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO accounts (id, email, password_hash, status, created_at)
+                VALUES (?, 'file-other@example.com', ?, 'ACTIVE', ?)
+                """,
+                OTHER_ACCOUNT_ID,
                 BCRYPT_HASH,
                 now.atOffset(ZoneOffset.UTC)
         );
@@ -117,8 +129,8 @@ class EvidenceFileApiIntegrationTest {
     @DisplayName("다른 계정의 Evidence 파일 업로드는 404로 숨긴다")
     void hidesEvidenceFromOtherAccount() throws Exception {
         AuthenticatedAccount otherAccount = new AuthenticatedAccount(
-                UUID.randomUUID(),
-                "other@example.com",
+                OTHER_ACCOUNT_ID,
+                "file-other@example.com",
                 Instant.now()
         );
 

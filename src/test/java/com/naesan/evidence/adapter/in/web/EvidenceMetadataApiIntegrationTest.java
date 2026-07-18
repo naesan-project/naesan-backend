@@ -34,6 +34,8 @@ import com.naesan.security.AuthenticatedAccount;
 class EvidenceMetadataApiIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("20d3817a-a8f7-426b-9e4f-1e592ddff646");
+    private static final UUID OTHER_ACCOUNT_ID =
+            UUID.fromString("9c15d0bc-ef3a-4121-a481-c459fb45f985");
     private static final UUID EVIDENCE_ID =
             UUID.fromString("d5a22870-e7a5-45fd-8969-38f4446be48d");
     private static final String BCRYPT_HASH = "$2a$12$" + "a".repeat(53);
@@ -49,6 +51,7 @@ class EvidenceMetadataApiIntegrationTest {
 
     @BeforeEach
     void prepareDraft() {
+        jdbcTemplate.update("DELETE FROM evidence_snapshots");
         jdbcTemplate.update("DELETE FROM evidence_files");
         jdbcTemplate.update("DELETE FROM purchase_evidence");
         jdbcTemplate.update("DELETE FROM accounts");
@@ -59,6 +62,15 @@ class EvidenceMetadataApiIntegrationTest {
                 VALUES (?, 'metadata-api@example.com', ?, 'ACTIVE', ?)
                 """,
                 OWNER_ACCOUNT_ID,
+                BCRYPT_HASH,
+                now.atOffset(ZoneOffset.UTC)
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO accounts (id, email, password_hash, status, created_at)
+                VALUES (?, 'metadata-other@example.com', ?, 'ACTIVE', ?)
+                """,
+                OTHER_ACCOUNT_ID,
                 BCRYPT_HASH,
                 now.atOffset(ZoneOffset.UTC)
         );
@@ -97,8 +109,8 @@ class EvidenceMetadataApiIntegrationTest {
     @DisplayName("다른 계정의 metadata 수정 요청을 404로 숨긴다")
     void hidesEvidenceFromOtherAccount() throws Exception {
         AuthenticatedAccount otherAccount = new AuthenticatedAccount(
-                UUID.randomUUID(),
-                "other@example.com",
+                OTHER_ACCOUNT_ID,
+                "metadata-other@example.com",
                 Instant.now()
         );
 
