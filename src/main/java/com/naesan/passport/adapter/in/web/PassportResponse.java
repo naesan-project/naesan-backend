@@ -5,6 +5,8 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 import com.naesan.passport.application.IssuedPassport;
+import com.naesan.passport.application.PassportDetails;
+import com.naesan.passport.domain.Passport;
 import com.naesan.passport.domain.ProofAnchor;
 
 public record PassportResponse(
@@ -16,12 +18,23 @@ public record PassportResponse(
 ) {
 
     public static PassportResponse from(IssuedPassport issuedPassport) {
+        return of(issuedPassport.passport(), issuedPassport.proofAnchor());
+    }
+
+    public static PassportResponse from(PassportDetails details) {
+        return of(details.passport(), details.proofAnchor());
+    }
+
+    private static PassportResponse of(
+            Passport passport,
+            ProofAnchor proofAnchor
+    ) {
         return new PassportResponse(
-                issuedPassport.passport().id(),
-                issuedPassport.passport().snapshotId(),
-                issuedPassport.passport().status().name(),
-                ProofResponse.from(issuedPassport.proofAnchor()),
-                issuedPassport.passport().createdAt()
+                passport.id(),
+                passport.snapshotId(),
+                passport.status().name(),
+                ProofResponse.from(proofAnchor),
+                passport.createdAt()
         );
     }
 

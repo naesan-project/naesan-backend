@@ -8,15 +8,32 @@ import org.springframework.context.annotation.Configuration;
 import com.naesan.evidence.application.port.out.EvidenceSnapshotRepository;
 import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
 import com.naesan.passport.application.IssuePassportService;
+import com.naesan.passport.application.GetPassportDetailsService;
+import com.naesan.passport.application.ListPassportsService;
 import com.naesan.passport.application.port.out.AnchorSaltGenerator;
 import com.naesan.passport.application.port.out.OutboxEventRepository;
 import com.naesan.passport.application.port.out.OwnershipHistoryRepository;
 import com.naesan.passport.application.port.out.PassportRepository;
+import com.naesan.passport.application.port.out.PassportQueryRepository;
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
 import com.naesan.passport.domain.AnchorCommitmentCalculator;
 
 @Configuration(proxyBeanMethods = false)
 public class PassportApplicationConfiguration {
+
+    @Bean
+    ListPassportsService listPassportsService(
+            PassportQueryRepository passportQueryRepository
+    ) {
+        return new ListPassportsService(passportQueryRepository);
+    }
+
+    @Bean
+    GetPassportDetailsService getPassportDetailsService(
+            PassportQueryRepository passportQueryRepository
+    ) {
+        return new GetPassportDetailsService(passportQueryRepository);
+    }
 
     @Bean
     AnchorCommitmentCalculator anchorCommitmentCalculator() {
