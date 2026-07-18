@@ -10,5 +10,7 @@ public interface FileStorage {
 
     InputStream open(StorageKey key);
 
+    StorageKey promote(StorageKey temporaryKey);
+
     void delete(StorageKey key);
 }

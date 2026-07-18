@@ -123,6 +123,23 @@ public final class EvidenceFile {
         );
     }
 
+    public EvidenceFile promote(StorageKey permanentKey, Instant promotedAt) {
+        if (state != EvidenceFileState.TEMPORARY) {
+            throw new IllegalStateException("임시 파일만 승격할 수 있습니다.");
+        }
+        return new EvidenceFile(
+                id,
+                evidenceId,
+                permanentKey,
+                sha256,
+                fileType,
+                size,
+                EvidenceFileState.PROMOTED,
+                createdAt,
+                promotedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

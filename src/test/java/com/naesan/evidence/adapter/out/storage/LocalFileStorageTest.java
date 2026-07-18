@@ -79,6 +79,22 @@ class LocalFileStorageTest {
     }
 
     @Test
+    @DisplayName("임시 파일을 무작위 permanent key로 승격한다")
+    void promotesTemporaryObject() throws IOException {
+        LocalFileStorage fileStorage = fileStorage();
+        StorageKey temporaryKey = fileStorage.storeTemporary(content());
+
+        StorageKey permanentKey = fileStorage.promote(temporaryKey);
+
+        assertThat(permanentKey.value()).startsWith("permanent/");
+        assertThatThrownBy(() -> fileStorage.open(temporaryKey))
+                .isInstanceOf(FileStorageException.class);
+        try (InputStream promotedContent = fileStorage.open(permanentKey)) {
+            assertThat(promotedContent.readAllBytes()).isEqualTo(FILE_CONTENT);
+        }
+    }
+
+    @Test
     @DisplayName("저장소 경계를 벗어나는 키를 거절한다")
     void rejectsKeyOutsideStorageRoot() {
         LocalFileStorage fileStorage = fileStorage();

@@ -68,4 +68,26 @@ class EvidenceFileTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Evidence 파일 크기는 0보다 커야 합니다.");
     }
+
+    @Test
+    @DisplayName("임시 Evidence 파일을 permanent key로 승격한다")
+    void promotesTemporaryFile() {
+        EvidenceFile temporaryFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                OBJECT_KEY,
+                SHA256,
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+        StorageKey permanentKey = new StorageKey("permanent/file");
+        Instant promotedAt = CREATED_AT.plusSeconds(1);
+
+        EvidenceFile promotedFile = temporaryFile.promote(permanentKey, promotedAt);
+
+        assertThat(promotedFile.state()).isEqualTo(EvidenceFileState.PROMOTED);
+        assertThat(promotedFile.objectKey()).isEqualTo(permanentKey);
+        assertThat(promotedFile.updatedAt()).isEqualTo(promotedAt);
+    }
 }

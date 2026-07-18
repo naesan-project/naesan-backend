@@ -2,8 +2,10 @@ package com.naesan.evidence.adapter.out.storage;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -13,6 +15,7 @@ import com.naesan.evidence.domain.StorageKey;
 
 public final class LocalFileStorage implements FileStorage {
     private static final String TEMPORARY_DIRECTORY = "temporary";
+    private static final String PERMANENT_DIRECTORY = "permanent";
 
     private final Path rootDirectory;
 
@@ -62,6 +65,38 @@ public final class LocalFileStorage implements FileStorage {
             return Files.newInputStream(objectPath);
         } catch (IOException exception) {
             throw new FileStorageException("저장된 파일을 열지 못했습니다.", exception);
+        }
+    }
+
+    @Override
+    public StorageKey promote(StorageKey temporaryKey) {
+        Path temporaryPath = resolveObjectPath(temporaryKey);
+        StorageKey permanentKey = createPermanentKey();
+        Path permanentPath = resolveObjectPath(permanentKey);
+
+        try {
+            Files.createDirectories(permanentPath.getParent());
+            moveToPermanentPath(temporaryPath, permanentPath);
+            return permanentKey;
+        } catch (IOException exception) {
+            throw new FileStorageException("임시 파일을 승격하지 못했습니다.", exception);
+        }
+    }
+
+    private StorageKey createPermanentKey() {
+        return new StorageKey(PERMANENT_DIRECTORY + "/" + UUID.randomUUID());
+    }
+
+    private void moveToPermanentPath(Path temporaryPath, Path permanentPath)
+            throws IOException {
+        try {
+            Files.move(
+                    temporaryPath,
+                    permanentPath,
+                    StandardCopyOption.ATOMIC_MOVE
+            );
+        } catch (AtomicMoveNotSupportedException exception) {
+            Files.move(temporaryPath, permanentPath);
         }
     }
 
