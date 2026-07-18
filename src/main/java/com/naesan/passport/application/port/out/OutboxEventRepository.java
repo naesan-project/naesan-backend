@@ -1,5 +1,6 @@
 package com.naesan.passport.application.port.out;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -20,5 +21,16 @@ public interface OutboxEventRepository {
     boolean completeClaimed(
             OutboxClaim claim,
             OutboxEvent succeededEvent
+    );
+
+    boolean scheduleRetry(
+            OutboxClaim claim,
+            Duration delay,
+            ProofProviderException failure
+    );
+
+    boolean moveToDeadLetter(
+            OutboxClaim claim,
+            ProofProviderException failure
     );
 }

@@ -9,6 +9,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -131,18 +132,49 @@ class ProcessProofOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("외부 호출 실패는 ACTIVE Passport를 rollback하지 않는다")
+    @DisplayName("일시적 외부 호출 실패는 Passport를 유지하고 retry를 예약한다")
     void keepsPassportActiveWhenExternalCallFails() {
         proofAnchorPort.setOutcome(ProofOutcome.RETRYABLE_FAILURE);
 
-        assertThatThrownBy(() ->
-                processProofOutboxService.processNext("worker-1")
-        ).isInstanceOf(ProofProviderException.class);
+        boolean processed = processProofOutboxService.processNext("worker-1");
 
+        assertThat(processed).isTrue();
         assertThat(passportStatus()).isEqualTo("ACTIVE");
         assertThat(proofState()).isEqualTo("PREPARED");
-        assertThat(outboxStatus()).isEqualTo("CLAIMED");
+        assertThat(outboxStatus()).isEqualTo("RETRY_WAIT");
         assertThat(processProofOutboxService.processNext("worker-2")).isFalse();
+    }
+
+    @Test
+    @DisplayName("영구 외부 호출 실패는 즉시 dead letter로 종료한다")
+    void movesPermanentFailureToDeadLetter() {
+        proofAnchorPort.setOutcome(ProofOutcome.PERMANENT_FAILURE);
+
+        boolean processed = processProofOutboxService.processNext("worker-1");
+
+        assertThat(processed).isTrue();
+        assertThat(outboxStatus()).isEqualTo("DEAD_LETTER");
+        assertThat(outboxError())
+                .containsExactly("PERMANENT", "INVALID_COMMAND");
+    }
+
+    @Test
+    @DisplayName("일시적 실패가 최대 횟수에 도달하면 dead letter로 종료한다")
+    void movesExhaustedRetryToDeadLetter() {
+        proofAnchorPort.setOutcome(ProofOutcome.RETRYABLE_FAILURE);
+
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            assertThat(processProofOutboxService.processNext("worker-" + attempt))
+                    .isTrue();
+            if (attempt < 5) {
+                makeRetryDue();
+            }
+        }
+
+        assertThat(outboxStatus()).isEqualTo("DEAD_LETTER");
+        assertThat(outboxAttemptCount()).isEqualTo(5);
+        assertThat(outboxError())
+                .containsExactly("RETRYABLE", "PROVIDER_UNAVAILABLE");
     }
 
     @Test
@@ -177,6 +209,32 @@ class ProcessProofOutboxIntegrationTest {
         return jdbcTemplate.queryForObject(
                 "SELECT status FROM outbox_events",
                 String.class
+        );
+    }
+
+    private int outboxAttemptCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT attempt_count FROM outbox_events",
+                Integer.class
+        );
+    }
+
+    private List<String> outboxError() {
+        return jdbcTemplate.query(
+                "SELECT error_category, error_code FROM outbox_events",
+                (resultSet, rowNumber) -> List.of(
+                        resultSet.getString("error_category"),
+                        resultSet.getString("error_code")
+                )
+        ).getFirst();
+    }
+
+    private void makeRetryDue() {
+        jdbcTemplate.update(
+                """
+                UPDATE outbox_events
+                SET next_attempt_at = clock_timestamp() - INTERVAL '1 second'
+                """
         );
     }
 

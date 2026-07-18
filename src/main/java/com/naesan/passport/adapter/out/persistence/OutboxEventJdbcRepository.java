@@ -2,6 +2,7 @@ package com.naesan.passport.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
@@ -11,6 +12,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.naesan.passport.application.port.out.OutboxEventRepository;
+import com.naesan.passport.application.port.out.ProofProviderException;
 import com.naesan.passport.application.OutboxClaimRequest;
 import com.naesan.passport.domain.OutboxClaim;
 import com.naesan.passport.domain.OutboxClaimReason;
@@ -121,6 +123,40 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
               AND claim_token = ?
               AND fencing_version = ?
             """;
+    private static final String SCHEDULE_RETRY = """
+            UPDATE outbox_events
+            SET
+                status = 'RETRY_WAIT',
+                next_attempt_at =
+                    clock_timestamp() + (? * INTERVAL '1 millisecond'),
+                error_category = ?,
+                error_code = ?,
+                updated_at = clock_timestamp(),
+                claim_token = NULL,
+                lease_until = NULL,
+                claimed_by = NULL,
+                claim_reason = NULL
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND fencing_version = ?
+            """;
+    private static final String MOVE_TO_DEAD_LETTER = """
+            UPDATE outbox_events
+            SET
+                status = 'DEAD_LETTER',
+                error_category = ?,
+                error_code = ?,
+                updated_at = clock_timestamp(),
+                claim_token = NULL,
+                lease_until = NULL,
+                claimed_by = NULL,
+                claim_reason = NULL
+            WHERE id = ?
+              AND status = 'CLAIMED'
+              AND claim_token = ?
+              AND fencing_version = ?
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -197,6 +233,40 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 succeededEvent.status().name(),
                 succeededEvent.updatedAt().atOffset(ZoneOffset.UTC),
                 succeededEvent.id(),
+                claim.claimToken(),
+                claim.fencingVersion()
+        );
+        return updatedRowCount == 1;
+    }
+
+    @Override
+    public boolean scheduleRetry(
+            OutboxClaim claim,
+            Duration delay,
+            ProofProviderException failure
+    ) {
+        int updatedRowCount = jdbcTemplate.update(
+                SCHEDULE_RETRY,
+                delay.toMillis(),
+                failure.failureType().name(),
+                failure.errorCode(),
+                claim.event().id(),
+                claim.claimToken(),
+                claim.fencingVersion()
+        );
+        return updatedRowCount == 1;
+    }
+
+    @Override
+    public boolean moveToDeadLetter(
+            OutboxClaim claim,
+            ProofProviderException failure
+    ) {
+        int updatedRowCount = jdbcTemplate.update(
+                MOVE_TO_DEAD_LETTER,
+                failure.failureType().name(),
+                failure.errorCode(),
+                claim.event().id(),
                 claim.claimToken(),
                 claim.fencingVersion()
         );

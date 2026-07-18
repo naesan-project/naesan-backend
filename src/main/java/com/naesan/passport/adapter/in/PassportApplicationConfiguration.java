@@ -53,14 +53,16 @@ public class PassportApplicationConfiguration {
             ProofAnchorPort proofAnchorPort,
             PlatformTransactionManager transactionManager,
             @Value("${naesan.proof.worker.lease-duration}")
-            Duration leaseDuration
+            Duration leaseDuration,
+            OutboxRetryPolicy retryPolicy
     ) {
         return new ProcessProofOutboxService(
                 outboxEventRepository,
                 proofAnchorRepository,
                 proofAnchorPort,
                 new TransactionTemplate(transactionManager),
-                leaseDuration
+                leaseDuration,
+                retryPolicy
         );
     }
 

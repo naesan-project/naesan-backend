@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -37,6 +38,7 @@ import com.naesan.passport.application.PassportErrorCode;
 import com.naesan.passport.application.PassportException;
 import com.naesan.passport.application.port.out.AnchorSaltGenerator;
 import com.naesan.passport.application.port.out.OutboxEventRepository;
+import com.naesan.passport.application.port.out.ProofProviderException;
 import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.OutboxClaim;
 
@@ -283,6 +285,23 @@ class IssuePassportTransactionIntegrationTest {
                 OutboxEvent succeededEvent
         ) {
             return delegate.completeClaimed(claim, succeededEvent);
+        }
+
+        @Override
+        public boolean scheduleRetry(
+                OutboxClaim claim,
+                Duration delay,
+                ProofProviderException failure
+        ) {
+            return delegate.scheduleRetry(claim, delay, failure);
+        }
+
+        @Override
+        public boolean moveToDeadLetter(
+                OutboxClaim claim,
+                ProofProviderException failure
+        ) {
+            return delegate.moveToDeadLetter(claim, failure);
         }
     }
 
