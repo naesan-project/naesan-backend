@@ -105,4 +105,31 @@ class EvidenceFileJdbcRepositoryTest {
     void returnsEmptyWhenFileDoesNotExist() {
         assertThat(repository.findByEvidenceId(EVIDENCE_ID)).isEmpty();
     }
+
+    @Test
+    @DisplayName("승격된 파일의 permanent key와 상태를 갱신한다")
+    void updatesPromotedFile() {
+        EvidenceFile temporaryFile = EvidenceFile.createTemporary(
+                FILE_ID,
+                EVIDENCE_ID,
+                new StorageKey("temporary/file"),
+                "a".repeat(64),
+                EvidenceFileType.PDF,
+                1024,
+                CREATED_AT
+        );
+        repository.save(temporaryFile);
+        EvidenceFile promotedFile = temporaryFile.promote(
+                new StorageKey("permanent/file"),
+                CREATED_AT.plusSeconds(1)
+        );
+
+        repository.update(promotedFile);
+
+        assertThat(repository.findByEvidenceId(EVIDENCE_ID))
+                .contains(promotedFile)
+                .get()
+                .satisfies(savedFile -> assertThat(savedFile.objectKey())
+                        .isEqualTo(new StorageKey("permanent/file")));
+    }
 }

@@ -9,5 +9,7 @@ public interface EvidenceFileRepository {
 
     void save(EvidenceFile evidenceFile);
 
+    void update(EvidenceFile evidenceFile);
+
     Optional<EvidenceFile> findByEvidenceId(UUID evidenceId);
 }

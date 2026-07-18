@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.naesan.evidence.application.EvidenceException;
 import com.naesan.evidence.application.port.out.EvidenceFileRepository;
 import com.naesan.evidence.domain.EvidenceFile;
 import com.naesan.evidence.domain.EvidenceFileState;
@@ -46,6 +47,11 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
             FROM evidence_files
             WHERE evidence_id = ?
             """;
+    private static final String UPDATE_FILE = """
+            UPDATE evidence_files
+            SET object_key = ?, state = ?, updated_at = ?
+            WHERE id = ? AND state = 'TEMPORARY'
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -67,6 +73,20 @@ public class EvidenceFileJdbcRepository implements EvidenceFileRepository {
                 evidenceFile.createdAt().atOffset(ZoneOffset.UTC),
                 evidenceFile.updatedAt().atOffset(ZoneOffset.UTC)
         );
+    }
+
+    @Override
+    public void update(EvidenceFile evidenceFile) {
+        int updatedRowCount = jdbcTemplate.update(
+                UPDATE_FILE,
+                evidenceFile.objectKey().value(),
+                evidenceFile.state().name(),
+                evidenceFile.updatedAt().atOffset(ZoneOffset.UTC),
+                evidenceFile.id()
+        );
+        if (updatedRowCount == 0) {
+            throw EvidenceException.concurrentModification();
+        }
     }
 
     @Override

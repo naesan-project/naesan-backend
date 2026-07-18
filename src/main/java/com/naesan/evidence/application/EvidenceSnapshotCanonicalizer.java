@@ -10,6 +10,7 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.ObjectWriteContext;
 import tools.jackson.core.json.JsonFactory;
 
 import com.naesan.evidence.domain.EvidenceFile;
@@ -70,7 +71,10 @@ public final class EvidenceSnapshotCanonicalizer {
         EvidenceMetadata metadata = evidence.metadata();
         ByteArrayOutputStream output = new ByteArrayOutputStream();
 
-        try (JsonGenerator json = jsonFactory.createGenerator(output)) {
+        try (JsonGenerator json = jsonFactory.createGenerator(
+                ObjectWriteContext.empty(),
+                output
+        )) {
             json.writeStartObject();
             json.writeNumberProperty("schemaVersion", SCHEMA_VERSION);
             json.writeStringProperty("evidenceId", evidence.id().toString());
