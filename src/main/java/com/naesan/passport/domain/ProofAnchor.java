@@ -236,6 +236,23 @@ public final class ProofAnchor {
         );
     }
 
+    public ProofAnchor resumeReconciliation(Instant changedAt) {
+        if (state != ProofAnchorState.MANUAL_REVIEW) {
+            throw new IllegalStateException("수동 검토 중인 외부 증명만 대사를 재개할 수 있습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.RECONCILE_PENDING,
+                externalReference,
+                createdAt,
+                changedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

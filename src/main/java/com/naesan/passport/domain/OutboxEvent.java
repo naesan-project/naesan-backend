@@ -172,6 +172,30 @@ public final class OutboxEvent {
         );
     }
 
+    public OutboxEvent reprocess(Instant requestedAt) {
+        OutboxEventStatus reprocessStatus = switch (status) {
+            case DEAD_LETTER -> OutboxEventStatus.PENDING;
+            case MANUAL_REVIEW -> OutboxEventStatus.RECONCILE_PENDING;
+            default -> throw new IllegalStateException(
+                    "종료되거나 수동 검토 중인 Outbox event만 재처리할 수 있습니다."
+            );
+        };
+        return new OutboxEvent(
+                id,
+                eventType,
+                aggregateId,
+                proofAnchorId,
+                schemaVersion,
+                payload,
+                dispatchKey,
+                reprocessStatus,
+                0,
+                requestedAt,
+                createdAt,
+                requestedAt
+        );
+    }
+
     public UUID id() {
         return id;
     }
