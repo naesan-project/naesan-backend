@@ -234,6 +234,79 @@ class PublicVerificationApiIntegrationTest {
                 .isEqualTo(unknown.getResponse().getContentAsString());
     }
 
+    @Test
+    @DisplayName("익명 조회는 source address별 분당 요청 수를 제한한다")
+    void limitsAnonymousVerificationRequests() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.SUMMARY);
+
+        for (int count = 0; count < 60; count++) {
+            mockMvc.perform(get("/api/public/passport-verification")
+                            .with(request -> {
+                                request.setRemoteAddr("198.51.100.10");
+                                return request;
+                            })
+                            .header(
+                                    PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                    share.rawToken()
+                            ))
+                    .andExpect(status().isOk());
+        }
+
+        MvcResult limited = mockMvc.perform(get("/api/public/passport-verification")
+                        .with(request -> {
+                            request.setRemoteAddr("198.51.100.10");
+                            return request;
+                        })
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.code").value("PUBLIC_RATE_LIMIT_EXCEEDED"))
+                .andReturn();
+
+        assertThat(limited.getResponse().getContentAsString())
+                .doesNotContain(share.rawToken());
+    }
+
+    @Test
+    @DisplayName("익명 file match는 조회보다 낮은 별도 요청 수를 적용한다")
+    void limitsAnonymousFileMatchRequests() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.FILE_MATCH);
+
+        for (int count = 0; count < 5; count++) {
+            mockMvc.perform(multipart(
+                                    "/api/public/passport-verification/file-match"
+                            )
+                            .file(candidateFile(ORIGINAL_FILE))
+                            .with(request -> {
+                                request.setRemoteAddr("198.51.100.20");
+                                return request;
+                            })
+                            .header(
+                                    PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                    share.rawToken()
+                            ))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(multipart("/api/public/passport-verification/file-match")
+                        .file(candidateFile(ORIGINAL_FILE))
+                        .with(request -> {
+                            request.setRemoteAddr("198.51.100.20");
+                            return request;
+                        })
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
+                .andExpect(jsonPath("$.code").value("PUBLIC_RATE_LIMIT_EXCEEDED"));
+    }
+
     private IssuedPublicShare issue(PublicShareCapability capability) {
         return managePublicShareService.issue(
                 OWNER_ACCOUNT_ID,

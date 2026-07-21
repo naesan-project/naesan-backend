@@ -11,6 +11,7 @@ import org.springframework.util.unit.DataSize;
 import com.naesan.passport.domain.AnchorCommitmentCalculator;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.share.adapter.out.security.SecurePublicShareTokenCodec;
+import com.naesan.share.adapter.in.web.PublicVerificationRateLimitFilter;
 import com.naesan.share.application.ManagePublicShareService;
 import com.naesan.share.application.PublicFileMatchVerifier;
 import com.naesan.share.application.VerifyPublicShareService;
@@ -66,6 +67,23 @@ public class ShareApplicationConfiguration {
         return new PublicFileMatchVerifier(
                 commitmentCalculator,
                 maximumFileSize.toBytes()
+        );
+    }
+
+    @Bean
+    PublicVerificationRateLimitFilter publicVerificationRateLimitFilter(
+            @Value("${naesan.share.rate-limit.verification-requests}")
+            int verificationRequestLimit,
+            @Value("${naesan.share.rate-limit.file-match-requests}")
+            int fileMatchRequestLimit,
+            @Value("${naesan.share.rate-limit.window}") Duration windowDuration,
+            Clock clock
+    ) {
+        return new PublicVerificationRateLimitFilter(
+                verificationRequestLimit,
+                fileMatchRequestLimit,
+                windowDuration,
+                clock
         );
     }
 }

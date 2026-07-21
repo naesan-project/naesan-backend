@@ -29,6 +29,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
 import com.naesan.account.application.port.out.AccountRepository;
+import com.naesan.share.adapter.in.web.PublicVerificationRateLimitFilter;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
@@ -40,6 +41,7 @@ public class SecurityConfiguration {
             SecurityContextRepository securityContextRepository,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
             AccountRepository accountRepository,
+            PublicVerificationRateLimitFilter publicVerificationRateLimitFilter,
             Clock clock,
             @Value("${naesan.security.session.absolute-timeout}")
             Duration absoluteSessionTimeout
@@ -88,6 +90,10 @@ public class SecurityConfiguration {
                 .requestCache(requestCache -> requestCache.disable())
                 .formLogin(formLogin -> formLogin.disable())
                 .httpBasic(httpBasic -> httpBasic.disable())
+                .addFilterAfter(
+                        publicVerificationRateLimitFilter,
+                        CorsFilter.class
+                )
                 .addFilterAfter(
                         new AbsoluteSessionTimeoutFilter(
                                 clock,
