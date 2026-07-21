@@ -43,4 +43,9 @@ public interface OutboxEventRepository {
             OutboxClaim claim,
             ProofProviderException failure
     );
+
+    Optional<Integer> reprocess(
+            OutboxEvent previousEvent,
+            OutboxEvent reprocessedEvent
+    );
 }

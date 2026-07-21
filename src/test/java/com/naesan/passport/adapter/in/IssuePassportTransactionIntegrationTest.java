@@ -319,6 +319,14 @@ class IssuePassportTransactionIntegrationTest {
         ) {
             return delegate.moveToManualReview(claim, failure);
         }
+
+        @Override
+        public Optional<Integer> reprocess(
+                OutboxEvent previousEvent,
+                OutboxEvent reprocessedEvent
+        ) {
+            return delegate.reprocess(previousEvent, reprocessedEvent);
+        }
     }
 
     static final class SynchronizingAnchorSaltGenerator implements AnchorSaltGenerator {

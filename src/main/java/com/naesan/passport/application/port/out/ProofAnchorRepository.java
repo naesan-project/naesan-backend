@@ -22,4 +22,6 @@ public interface ProofAnchorRepository {
     boolean resumePrepared(ProofAnchor proofAnchor);
 
     boolean markManualReview(ProofAnchor proofAnchor);
+
+    boolean resumeReconciliation(ProofAnchor proofAnchor);
 }

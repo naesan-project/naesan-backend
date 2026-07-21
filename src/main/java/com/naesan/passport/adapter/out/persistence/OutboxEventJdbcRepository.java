@@ -190,6 +190,24 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
               AND claim_token = ?
               AND fencing_version = ?
             """;
+    private static final String REPROCESS = """
+            UPDATE outbox_events
+            SET
+                status = ?,
+                attempt_count = 0,
+                next_attempt_at = ?,
+                reprocess_count = reprocess_count + 1,
+                error_category = NULL,
+                error_code = NULL,
+                updated_at = ?,
+                claim_token = NULL,
+                lease_until = NULL,
+                claimed_by = NULL,
+                claim_reason = NULL
+            WHERE id = ?
+              AND status = ?
+            RETURNING reprocess_count
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -336,6 +354,24 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 claim.fencingVersion()
         );
         return updatedRowCount == 1;
+    }
+
+    @Override
+    public Optional<Integer> reprocess(
+            OutboxEvent previousEvent,
+            OutboxEvent reprocessedEvent
+    ) {
+        return jdbcTemplate.query(
+                        REPROCESS,
+                        (resultSet, rowNumber) -> resultSet.getInt("reprocess_count"),
+                        reprocessedEvent.status().name(),
+                        reprocessedEvent.nextAttemptAt().atOffset(ZoneOffset.UTC),
+                        reprocessedEvent.updatedAt().atOffset(ZoneOffset.UTC),
+                        previousEvent.id(),
+                        previousEvent.status().name()
+                )
+                .stream()
+                .findFirst();
     }
 
     private OutboxEvent mapOutboxEvent(ResultSet resultSet, int rowNumber) throws SQLException {

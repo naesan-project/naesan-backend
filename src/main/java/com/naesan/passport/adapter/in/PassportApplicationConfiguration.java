@@ -16,9 +16,11 @@ import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.GetPassportDetailsService;
 import com.naesan.passport.application.ListPassportsService;
 import com.naesan.passport.application.ProcessProofOutboxService;
+import com.naesan.passport.application.ReprocessProofOutboxService;
 import com.naesan.passport.application.OutboxRetryPolicy;
 import com.naesan.passport.application.port.out.AnchorSaltGenerator;
 import com.naesan.passport.application.port.out.OutboxEventRepository;
+import com.naesan.passport.application.port.out.OutboxReprocessAuditRepository;
 import com.naesan.passport.application.port.out.OwnershipHistoryRepository;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.passport.application.port.out.PassportQueryRepository;
@@ -28,6 +30,21 @@ import com.naesan.passport.domain.AnchorCommitmentCalculator;
 
 @Configuration(proxyBeanMethods = false)
 public class PassportApplicationConfiguration {
+
+    @Bean
+    ReprocessProofOutboxService reprocessProofOutboxService(
+            OutboxEventRepository outboxEventRepository,
+            ProofAnchorRepository proofAnchorRepository,
+            OutboxReprocessAuditRepository auditRepository,
+            Clock clock
+    ) {
+        return new ReprocessProofOutboxService(
+                outboxEventRepository,
+                proofAnchorRepository,
+                auditRepository,
+                clock
+        );
+    }
 
     @Bean
     OutboxRetryPolicy outboxRetryPolicy(
