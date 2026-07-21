@@ -41,6 +41,8 @@ public class PassportJdbcRepository implements PassportRepository {
             VALUES (?, ?, ?, ?, ?, ?)
             """;
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
+    private static final String FIND_BY_ID_FOR_UPDATE =
+            SELECT_COLUMNS + " WHERE id = ? FOR UPDATE";
     private static final String FIND_BY_SNAPSHOT_ID =
             SELECT_COLUMNS + " WHERE snapshot_id = ?";
     private static final String FIND_ALL_BY_CURRENT_HOLDER = SELECT_COLUMNS + """
@@ -74,6 +76,11 @@ public class PassportJdbcRepository implements PassportRepository {
     @Override
     public Optional<Passport> findById(UUID passportId) {
         return findOne(FIND_BY_ID, passportId);
+    }
+
+    @Override
+    public Optional<Passport> findByIdForUpdate(UUID passportId) {
+        return findOne(FIND_BY_ID_FOR_UPDATE, passportId);
     }
 
     private Optional<Passport> findOne(String sql, UUID id) {

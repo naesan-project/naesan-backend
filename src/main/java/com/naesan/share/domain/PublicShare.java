@@ -154,4 +154,20 @@ public final class PublicShare {
     public Instant createdAt() {
         return createdAt;
     }
+
+    @Override
+    public boolean equals(Object object) {
+        if (this == object) {
+            return true;
+        }
+        if (!(object instanceof PublicShare publicShare)) {
+            return false;
+        }
+        return id.equals(publicShare.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
 }

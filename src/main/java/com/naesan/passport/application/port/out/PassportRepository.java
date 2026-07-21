@@ -12,6 +12,8 @@ public interface PassportRepository {
 
     Optional<Passport> findById(UUID passportId);
 
+    Optional<Passport> findByIdForUpdate(UUID passportId);
+
     Optional<Passport> findBySnapshotId(UUID snapshotId);
 
     List<Passport> findAllByCurrentHolderAccountId(UUID accountId);
