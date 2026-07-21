@@ -68,20 +68,23 @@ public class PublicVerificationApiController {
             String rawToken,
             @RequestPart("file") MultipartFile file
     ) {
-        PublicFileMatchResult result = verifyPublicShareService.match(
-                rawToken,
-                fileContent(file),
-                file.getContentType()
-        );
+        PublicFileMatchResult result = matchFile(rawToken, file);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .header(REFERRER_POLICY_HEADER, NO_REFERRER)
                 .body(PublicFileMatchResponse.from(result));
     }
 
-    private InputStream fileContent(MultipartFile file) {
-        try {
-            return file.getInputStream();
+    private PublicFileMatchResult matchFile(
+            String rawToken,
+            MultipartFile file
+    ) {
+        try (InputStream content = file.getInputStream()) {
+            return verifyPublicShareService.match(
+                    rawToken,
+                    content,
+                    file.getContentType()
+            );
         } catch (IOException exception) {
             throw PublicShareException.fileReadFailed(exception);
         }
