@@ -10,8 +10,10 @@ import org.springframework.context.annotation.Configuration;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.share.adapter.out.security.SecurePublicShareTokenCodec;
 import com.naesan.share.application.ManagePublicShareService;
+import com.naesan.share.application.VerifyPublicShareService;
 import com.naesan.share.application.port.out.PublicShareRepository;
 import com.naesan.share.application.port.out.PublicShareTokenCodec;
+import com.naesan.share.application.port.out.PublicShareVerificationRepository;
 
 @Configuration(proxyBeanMethods = false)
 public class ShareApplicationConfiguration {
@@ -34,6 +36,19 @@ public class ShareApplicationConfiguration {
                 publicShareRepository,
                 tokenCodec,
                 timeToLive,
+                clock
+        );
+    }
+
+    @Bean
+    VerifyPublicShareService verifyPublicShareService(
+            PublicShareTokenCodec tokenCodec,
+            PublicShareVerificationRepository verificationRepository,
+            Clock clock
+    ) {
+        return new VerifyPublicShareService(
+                tokenCodec,
+                verificationRepository,
                 clock
         );
     }

@@ -51,6 +51,9 @@ public class SecurityConfiguration {
                         .csrfTokenRepository(csrfTokenRepository)
                         .sessionAuthenticationStrategy(sessionAuthenticationStrategy)
                         .ignoringRequestMatchers("/api/accounts")
+                        .ignoringRequestMatchers(
+                                "/api/public/passport-verification/file-match"
+                        )
                 )
                 .securityContext(securityContext -> securityContext
                         .securityContextRepository(securityContextRepository)
@@ -59,6 +62,14 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/accounts").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/sessions").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/public/passport-verification"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/public/passport-verification/file-match"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptionHandling -> exceptionHandling
@@ -108,7 +119,8 @@ public class SecurityConfiguration {
         ));
         configuration.setAllowedHeaders(List.of(
                 HttpHeaders.CONTENT_TYPE,
-                "X-XSRF-TOKEN"
+                "X-XSRF-TOKEN",
+                "X-Public-Share-Token"
         ));
         configuration.setAllowCredentials(true);
 
