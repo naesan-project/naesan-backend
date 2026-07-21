@@ -195,7 +195,7 @@ class PassportQueryApiIntegrationTest {
             String email
     ) {
         return UsernamePasswordAuthenticationToken.authenticated(
-                new AuthenticatedAccount(accountId, email, CREATED_AT),
+                new AuthenticatedAccount(accountId, email, Instant.now()),
                 null,
                 List.of()
         );
