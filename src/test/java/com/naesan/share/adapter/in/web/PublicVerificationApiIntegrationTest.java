@@ -19,9 +19,14 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import java.util.HexFormat;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -305,6 +310,51 @@ class PublicVerificationApiIntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
                 .andExpect(jsonPath("$.code").value("PUBLIC_RATE_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    @DisplayName("공개 검증 URI 응답과 application log에 token과 privacy 정보가 남지 않는다")
+    void preventsPublicVerificationLeakage() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.FILE_MATCH);
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        rootLogger.addAppender(appender);
+
+        MvcResult result;
+        try {
+            result = mockMvc.perform(get("/api/public/passport-verification")
+                            .with(request -> {
+                                request.setRemoteAddr("198.51.100.30");
+                                return request;
+                            })
+                            .header(
+                                    PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                    share.rawToken()
+                            ))
+                    .andExpect(status().isOk())
+                    .andReturn();
+        } finally {
+            rootLogger.detachAppender(appender);
+            appender.stop();
+        }
+
+        String loggedMessages = appender.list.stream()
+                .map(ILoggingEvent::getFormattedMessage)
+                .reduce("", String::concat);
+        assertThat(result.getRequest().getRequestURI())
+                .doesNotContain(share.rawToken());
+        assertThat(result.getResponse().getContentAsString())
+                .doesNotContain(share.rawToken())
+                .doesNotContain(OWNER_ACCOUNT_ID.toString())
+                .doesNotContain("public-owner@example.com")
+                .doesNotContain("SERIAL-PRIVATE");
+        assertThat(loggedMessages)
+                .doesNotContain(share.rawToken())
+                .doesNotContain(SNAPSHOT_DIGEST)
+                .doesNotContain(HexFormat.of().formatHex(ANCHOR_SALT))
+                .doesNotContain(OWNER_ACCOUNT_ID.toString())
+                .doesNotContain("public-owner@example.com");
     }
 
     private IssuedPublicShare issue(PublicShareCapability capability) {

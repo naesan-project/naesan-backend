@@ -10,7 +10,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -169,6 +175,48 @@ class ManagePublicShareServiceIntegrationTest {
                 exception -> assertThat(exception.code())
                         .isEqualTo(PublicShareErrorCode.PUBLIC_SHARE_NOT_FOUND)
         );
+    }
+
+    @Test
+    @DisplayName("동시에 두 share를 발급해도 미폐기 share는 하나만 남는다")
+    void serializesConcurrentIssuance() throws Exception {
+        CyclicBarrier startBarrier = new CyclicBarrier(2);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        Callable<PublicShareErrorCode> issuance = () -> {
+            startBarrier.await();
+            try {
+                service.issue(
+                        OWNER_ACCOUNT_ID,
+                        PASSPORT_ID,
+                        PublicShareCapability.SUMMARY
+                );
+                return null;
+            } catch (PublicShareException exception) {
+                return exception.code();
+            }
+        };
+
+        List<Future<PublicShareErrorCode>> results;
+        try {
+            results = executor.invokeAll(List.of(issuance, issuance));
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(results).extracting(Future::get)
+                .containsExactlyInAnyOrder(
+                        null,
+                        PublicShareErrorCode.PUBLIC_SHARE_ALREADY_ACTIVE
+                );
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM public_shares
+                WHERE passport_id = ? AND revoked_at IS NULL
+                """,
+                Integer.class,
+                PASSPORT_ID
+        )).isOne();
     }
 
     private void insertAccount(UUID accountId, String email) {

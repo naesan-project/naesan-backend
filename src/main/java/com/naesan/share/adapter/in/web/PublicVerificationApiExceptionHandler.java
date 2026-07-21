@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.naesan.account.adapter.in.web.ApiErrorResponse;
+import com.naesan.share.application.PublicShareErrorCode;
 import com.naesan.share.application.PublicShareException;
 
 @RestControllerAdvice(assignableTypes = PublicVerificationApiController.class)
@@ -19,7 +20,7 @@ public class PublicVerificationApiExceptionHandler {
             PublicShareException exception
     ) {
         boolean notFound = exception.code()
-                == com.naesan.share.application.PublicShareErrorCode.PUBLIC_SHARE_NOT_FOUND;
+                == PublicShareErrorCode.PUBLIC_SHARE_NOT_FOUND;
         HttpStatus status = notFound ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
         String code = notFound ? "PUBLIC_SHARE_NOT_FOUND" : exception.code().name();
         String message = notFound
