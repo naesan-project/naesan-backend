@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -22,8 +23,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -33,12 +37,19 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.ProcessProofOutboxService;
+import com.naesan.passport.application.ReprocessOutboxEventCommand;
+import com.naesan.passport.application.ReprocessProofOutboxService;
 import com.naesan.security.AuthenticatedAccount;
+import com.naesan.passport.support.ControllableProofAnchorAdapter;
+import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
 
 @SpringBootTest(properties =
         "naesan.storage.local.root=build/test-storage/passport-flow")
 @AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@Import({
+        TestcontainersConfiguration.class,
+        PassportFlowApiIntegrationTest.ControlledProofConfiguration.class
+})
 class PassportFlowApiIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("8599275f-cb77-403b-947f-f91a6639f8c9");
@@ -49,21 +60,29 @@ class PassportFlowApiIntegrationTest {
 
     private final MockMvc mockMvc;
     private final ProcessProofOutboxService processProofOutboxService;
+    private final ReprocessProofOutboxService reprocessProofOutboxService;
+    private final ControllableProofAnchorAdapter proofAnchorPort;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
     PassportFlowApiIntegrationTest(
             MockMvc mockMvc,
             ProcessProofOutboxService processProofOutboxService,
+            ReprocessProofOutboxService reprocessProofOutboxService,
+            ControllableProofAnchorAdapter proofAnchorPort,
             JdbcTemplate jdbcTemplate
     ) {
         this.mockMvc = mockMvc;
         this.processProofOutboxService = processProofOutboxService;
+        this.reprocessProofOutboxService = reprocessProofOutboxService;
+        this.proofAnchorPort = proofAnchorPort;
         this.jdbcTemplate = jdbcTemplate;
     }
 
     @BeforeEach
     void prepareAccounts() {
+        proofAnchorPort.reset();
+        jdbcTemplate.update("DELETE FROM outbox_reprocess_audit");
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
         jdbcTemplate.update("DELETE FROM ownership_history");
@@ -105,6 +124,40 @@ class PassportFlowApiIntegrationTest {
                 .andExpect(jsonPath("$.proof.commitment").value(commitment))
                 .andExpect(jsonPath("$.proof.anchorSalt").doesNotExist())
                 .andExpect(jsonPath("$.snapshotDigest").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("JSON API 발급 뒤 내부 재처리로 dead letter를 복구한다")
+    void recoversDeadLetterWithoutPublicOperationApi() throws Exception {
+        UUID evidenceId = createEvidenceDraft();
+        attachEvidenceFile(evidenceId);
+        UUID snapshotId = confirmEvidence(evidenceId);
+        MvcResult issuance = issuePassport(snapshotId);
+        UUID passportId = UUID.fromString(jsonValue(issuance, "$.id"));
+        proofAnchorPort.setOutcome(ProofOutcome.PERMANENT_FAILURE);
+
+        processProofOutboxService.processNext("flow-worker-1");
+
+        mockMvc.perform(get("/api/passports/{passportId}", passportId)
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.proof.state").value("PREPARED"));
+
+        reprocessProofOutboxService.reprocess(new ReprocessOutboxEventCommand(
+                outboxEventId(),
+                "local-operator",
+                "provider 설정 복구"
+        ));
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS);
+        processProofOutboxService.processNext("flow-worker-2");
+
+        mockMvc.perform(get("/api/passports/{passportId}", passportId)
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.proof.state").value("CONFIRMED"));
+        assertThat(auditCount()).isOne();
     }
 
     @Test
@@ -206,6 +259,20 @@ class PassportFlowApiIntegrationTest {
         );
     }
 
+    private UUID outboxEventId() {
+        return jdbcTemplate.queryForObject(
+                "SELECT id FROM outbox_events",
+                UUID.class
+        );
+    }
+
+    private int auditCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outbox_reprocess_audit",
+                Integer.class
+        );
+    }
+
     private UsernamePasswordAuthenticationToken ownerAuthentication() {
         return accountAuthentication(
                 OWNER_ACCOUNT_ID,
@@ -225,9 +292,19 @@ class PassportFlowApiIntegrationTest {
             String email
     ) {
         return UsernamePasswordAuthenticationToken.authenticated(
-                new AuthenticatedAccount(accountId, email, CREATED_AT),
+                new AuthenticatedAccount(accountId, email, Instant.now()),
                 null,
                 List.of()
         );
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class ControlledProofConfiguration {
+
+        @Bean
+        @Primary
+        ControllableProofAnchorAdapter controllableProofAnchorAdapter() {
+            return new ControllableProofAnchorAdapter(Clock.systemUTC());
+        }
     }
 }
