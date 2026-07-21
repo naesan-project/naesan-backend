@@ -1,20 +1,30 @@
 package com.naesan.passport.adapter.in;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.naesan.TestcontainersConfiguration;
@@ -22,6 +32,9 @@ import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
 import com.naesan.passport.application.ReprocessOutboxEventCommand;
 import com.naesan.passport.application.ReprocessProofOutboxService;
+import com.naesan.passport.application.OutboxOperationException;
+import com.naesan.passport.adapter.out.persistence.OutboxReprocessAuditJdbcRepository;
+import com.naesan.passport.application.port.out.OutboxReprocessAuditRepository;
 import com.naesan.passport.application.port.out.ProofProviderCapabilities;
 import com.naesan.passport.domain.OutboxReprocessAudit;
 import com.naesan.passport.support.ControllableProofAnchorAdapter;
@@ -30,7 +43,8 @@ import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
 @SpringBootTest
 @Import({
         TestcontainersConfiguration.class,
-        ProcessProofOutboxIntegrationTest.RecordingProofConfiguration.class
+        ProcessProofOutboxIntegrationTest.RecordingProofConfiguration.class,
+        ReprocessProofOutboxIntegrationTest.FailureInjectionConfiguration.class
 })
 class ReprocessProofOutboxIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
@@ -46,6 +60,7 @@ class ReprocessProofOutboxIntegrationTest {
     private final ProcessProofOutboxService processProofOutboxService;
     private final ReprocessProofOutboxService reprocessProofOutboxService;
     private final ControllableProofAnchorAdapter proofAnchorPort;
+    private final FailureInjectingAuditRepository auditRepository;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -54,18 +69,21 @@ class ReprocessProofOutboxIntegrationTest {
             ProcessProofOutboxService processProofOutboxService,
             ReprocessProofOutboxService reprocessProofOutboxService,
             ControllableProofAnchorAdapter proofAnchorPort,
+            FailureInjectingAuditRepository auditRepository,
             JdbcTemplate jdbcTemplate
     ) {
         this.issuePassportService = issuePassportService;
         this.processProofOutboxService = processProofOutboxService;
         this.reprocessProofOutboxService = reprocessProofOutboxService;
         this.proofAnchorPort = proofAnchorPort;
+        this.auditRepository = auditRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 
     @BeforeEach
     void prepareIssuedPassport() {
         proofAnchorPort.reset();
+        auditRepository.allowSave();
         jdbcTemplate.update("DELETE FROM outbox_reprocess_audit");
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
@@ -175,6 +193,84 @@ class ReprocessProofOutboxIntegrationTest {
         assertThat(proofAnchorPort.lookupCount()).isOne();
     }
 
+    @Test
+    @DisplayName("두 운영자가 같은 dead letter를 동시에 재처리하면 한 건만 승인된다")
+    void allowsOneConcurrentReprocess()
+            throws ExecutionException, InterruptedException {
+        proofAnchorPort.setOutcome(ProofOutcome.PERMANENT_FAILURE);
+        processProofOutboxService.processNext("worker-1");
+        UUID eventId = eventId();
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Boolean> first = reprocessConcurrently(
+                    executor,
+                    start,
+                    eventId,
+                    "operator-1"
+            );
+            Future<Boolean> second = reprocessConcurrently(
+                    executor,
+                    start,
+                    eventId,
+                    "operator-2"
+            );
+
+            start.countDown();
+
+            assertThat(List.of(first.get(), second.get()))
+                    .containsExactlyInAnyOrder(true, false);
+        }
+
+        assertThat(outboxStatus()).isEqualTo("PENDING");
+        assertThat(reprocessCount()).isOne();
+        assertThat(auditCount()).isOne();
+    }
+
+    private Future<Boolean> reprocessConcurrently(
+            ExecutorService executor,
+            CountDownLatch start,
+            UUID eventId,
+            String operatorId
+    ) {
+        return executor.submit(() -> {
+            start.await();
+            try {
+                reprocessProofOutboxService.reprocess(
+                        new ReprocessOutboxEventCommand(
+                                eventId,
+                                operatorId,
+                                "동시 재처리 검증"
+                        )
+                );
+                return true;
+            } catch (OutboxOperationException exception) {
+                return false;
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("감사 기록 저장 실패는 event 재처리 상태를 함께 rollback한다")
+    void rollsBackWhenAuditSaveFails() {
+        proofAnchorPort.setOutcome(ProofOutcome.PERMANENT_FAILURE);
+        processProofOutboxService.processNext("worker-1");
+        UUID eventId = eventId();
+        auditRepository.failSave();
+
+        assertThatThrownBy(() -> reprocessProofOutboxService.reprocess(
+                new ReprocessOutboxEventCommand(
+                        eventId,
+                        "operator-1",
+                        "감사 저장 실패 검증"
+                )
+        )).isInstanceOf(InjectedAuditFailure.class);
+
+        assertThat(outboxStatus()).isEqualTo("DEAD_LETTER");
+        assertThat(reprocessCount()).isZero();
+        assertThat(auditCount()).isZero();
+    }
+
     private UUID eventId() {
         return jdbcTemplate.queryForObject(
                 "SELECT id FROM outbox_events",
@@ -231,6 +327,13 @@ class ReprocessProofOutboxIntegrationTest {
         );
     }
 
+    private int reprocessCount() {
+        return jdbcTemplate.queryForObject(
+                "SELECT reprocess_count FROM outbox_events",
+                Integer.class
+        );
+    }
+
     private record OutboxState(
             String status,
             int attemptCount,
@@ -238,5 +341,48 @@ class ReprocessProofOutboxIntegrationTest {
             String errorCategory,
             String errorCode
     ) {
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FailureInjectionConfiguration {
+
+        @Bean
+        @Primary
+        FailureInjectingAuditRepository failureInjectingAuditRepository(
+                OutboxReprocessAuditJdbcRepository delegate
+        ) {
+            return new FailureInjectingAuditRepository(delegate);
+        }
+    }
+
+    static final class FailureInjectingAuditRepository
+            implements OutboxReprocessAuditRepository {
+        private final OutboxReprocessAuditJdbcRepository delegate;
+        private boolean failing;
+
+        FailureInjectingAuditRepository(
+                OutboxReprocessAuditJdbcRepository delegate
+        ) {
+            this.delegate = delegate;
+        }
+
+        void allowSave() {
+            failing = false;
+        }
+
+        void failSave() {
+            failing = true;
+        }
+
+        @Override
+        public void save(OutboxReprocessAudit audit) {
+            if (failing) {
+                throw new InjectedAuditFailure();
+            }
+            delegate.save(audit);
+        }
+    }
+
+    static final class InjectedAuditFailure extends RuntimeException {
     }
 }
