@@ -2,18 +2,22 @@ package com.naesan.share.adapter.in.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.HexFormat;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +31,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -34,6 +39,7 @@ import com.naesan.TestcontainersConfiguration;
 import com.naesan.share.application.IssuedPublicShare;
 import com.naesan.share.application.ManagePublicShareService;
 import com.naesan.share.domain.PublicShareCapability;
+import com.naesan.passport.domain.AnchorCommitmentCalculator;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -51,8 +57,15 @@ class PublicVerificationApiIntegrationTest {
     private static final UUID PASSPORT_ID =
             UUID.fromString("b6f6ff41-b757-46db-89a5-eac1e8e2f1bc");
     private static final String BCRYPT_HASH = "$2a$12$" + "a".repeat(53);
-    private static final String SNAPSHOT_DIGEST = "a".repeat(64);
     private static final Instant CURRENT_TIME = Instant.parse("2026-07-21T00:00:00Z");
+    private static final byte[] ORIGINAL_FILE =
+            "%PDF-1.7\noriginal".getBytes(StandardCharsets.UTF_8);
+    private static final byte[] ANCHOR_SALT = filledBytes(0x11);
+    private static final byte[] CANONICAL_PAYLOAD = canonicalPayload();
+    private static final String SNAPSHOT_DIGEST = sha256Hex(CANONICAL_PAYLOAD);
+    private static final byte[] COMMITMENT = new AnchorCommitmentCalculator()
+            .calculate(SNAPSHOT_DIGEST, ANCHOR_SALT)
+            .commitment();
 
     private final MockMvc mockMvc;
     private final ManagePublicShareService managePublicShareService;
@@ -102,7 +115,8 @@ class PublicVerificationApiIntegrationTest {
                 .andExpect(jsonPath("$.purchasedAt").value("2026-07-01"))
                 .andExpect(jsonPath("$.passportStatus").value("ACTIVE"))
                 .andExpect(jsonPath("$.trustStage").value("INTERNALLY_SEALED"))
-                .andExpect(jsonPath("$.commitment").value("2".repeat(64)))
+                .andExpect(jsonPath("$.commitment")
+                        .value(HexFormat.of().formatHex(COMMITMENT)))
                 .andExpect(jsonPath("$.verificationMaterial").doesNotExist())
                 .andReturn();
 
@@ -133,7 +147,7 @@ class PublicVerificationApiIntegrationTest {
                 .andExpect(jsonPath("$.verificationMaterial.anchorSalt")
                         .value("1".repeat(64)))
                 .andExpect(jsonPath("$.verificationMaterial.commitment")
-                        .value("2".repeat(64)))
+                        .value(HexFormat.of().formatHex(COMMITMENT)))
                 .andExpect(jsonPath("$.verificationMaterial.snapshotSchemaVersion")
                         .value(1))
                 .andExpect(jsonPath("$.verificationMaterial.commitmentSchemaVersion")
@@ -180,6 +194,46 @@ class PublicVerificationApiIntegrationTest {
                 .isEqualTo(expired.getResponse().getContentAsString());
     }
 
+    @Test
+    @DisplayName("FILE_MATCH token은 candidate file을 저장하지 않고 일치 여부만 반환한다")
+    void matchesCandidateFile() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.FILE_MATCH);
+
+        mockMvc.perform(multipart(
+                                "/api/public/passport-verification/file-match"
+                        )
+                        .file(candidateFile(ORIGINAL_FILE))
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.matched").value(true))
+                .andExpect(jsonPath("$.trustStage").value("INTERNALLY_SEALED"))
+                .andExpect(jsonPath("$.commitment")
+                        .value(HexFormat.of().formatHex(COMMITMENT)))
+                .andExpect(jsonPath("$.candidateDigest").doesNotExist())
+                .andExpect(jsonPath("$.snapshotDigest").doesNotExist());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM evidence_files",
+                Integer.class
+        )).isZero();
+    }
+
+    @Test
+    @DisplayName("SUMMARY token의 file match는 unknown token과 같은 404를 반환한다")
+    void hidesCapabilityMismatch() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.SUMMARY);
+
+        MvcResult mismatch = fileMatchNotFound(share.rawToken());
+        MvcResult unknown = fileMatchNotFound("z".repeat(43));
+
+        assertThat(mismatch.getResponse().getContentAsString())
+                .isEqualTo(unknown.getResponse().getContentAsString());
+    }
+
     private IssuedPublicShare issue(PublicShareCapability capability) {
         return managePublicShareService.issue(
                 OWNER_ACCOUNT_ID,
@@ -199,6 +253,30 @@ class PublicVerificationApiIntegrationTest {
                 .andExpect(header().string("Referrer-Policy", "no-referrer"))
                 .andExpect(jsonPath("$.code").value("PUBLIC_SHARE_NOT_FOUND"))
                 .andReturn();
+    }
+
+    private MvcResult fileMatchNotFound(String rawToken) throws Exception {
+        return mockMvc.perform(multipart(
+                                "/api/public/passport-verification/file-match"
+                        )
+                        .file(candidateFile(ORIGINAL_FILE))
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                rawToken
+                        ))
+                .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+                .andExpect(jsonPath("$.code").value("PUBLIC_SHARE_NOT_FOUND"))
+                .andReturn();
+    }
+
+    private MockMultipartFile candidateFile(byte[] content) {
+        return new MockMultipartFile(
+                "file",
+                "candidate.pdf",
+                "application/pdf",
+                content
+        );
     }
 
     private void insertPassportGraph() {
@@ -241,7 +319,7 @@ class PublicVerificationApiIntegrationTest {
                 """,
                 SNAPSHOT_ID,
                 EVIDENCE_ID,
-                "{\"schemaVersion\":1}".getBytes(StandardCharsets.UTF_8),
+                CANONICAL_PAYLOAD,
                 SNAPSHOT_DIGEST,
                 CURRENT_TIME.atOffset(ZoneOffset.UTC)
         );
@@ -268,17 +346,35 @@ class PublicVerificationApiIntegrationTest {
                 """,
                 UUID.randomUUID(),
                 PASSPORT_ID,
-                filledBytes(0x11),
-                filledBytes(0x22),
+                ANCHOR_SALT,
+                COMMITMENT,
                 CURRENT_TIME.atOffset(ZoneOffset.UTC),
                 CURRENT_TIME.atOffset(ZoneOffset.UTC)
         );
     }
 
-    private byte[] filledBytes(int value) {
+    private static byte[] filledBytes(int value) {
         byte[] bytes = new byte[32];
         java.util.Arrays.fill(bytes, (byte) value);
         return bytes;
+    }
+
+    private static byte[] canonicalPayload() {
+        String fileDigest = sha256Hex(ORIGINAL_FILE);
+        return ("""
+                {"schemaVersion":1,"fileSha256":"%s","productName":"생각등대"}
+                """.formatted(fileDigest).strip())
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static String sha256Hex(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(
+                    MessageDigest.getInstance("SHA-256").digest(content)
+            );
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     @TestConfiguration(proxyBeanMethods = false)

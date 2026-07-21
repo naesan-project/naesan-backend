@@ -18,12 +18,19 @@ public class PublicVerificationApiExceptionHandler {
     ResponseEntity<ApiErrorResponse> handlePublicShare(
             PublicShareException exception
     ) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        boolean notFound = exception.code()
+                == com.naesan.share.application.PublicShareErrorCode.PUBLIC_SHARE_NOT_FOUND;
+        HttpStatus status = notFound ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
+        String code = notFound ? "PUBLIC_SHARE_NOT_FOUND" : exception.code().name();
+        String message = notFound
+                ? "Public share를 찾을 수 없습니다."
+                : exception.getMessage();
+        return ResponseEntity.status(status)
                 .cacheControl(CacheControl.noStore())
                 .header(REFERRER_POLICY_HEADER, NO_REFERRER)
                 .body(new ApiErrorResponse(
-                        "PUBLIC_SHARE_NOT_FOUND",
-                        "Public share를 찾을 수 없습니다."
+                        code,
+                        message
                 ));
     }
 }

@@ -1,13 +1,21 @@
 package com.naesan.share.adapter.in.web;
 
+import java.io.IOException;
+import java.io.InputStream;
+
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import com.naesan.share.application.PublicFileMatchResult;
 import com.naesan.share.application.PublicPassportVerification;
+import com.naesan.share.application.PublicShareException;
 import com.naesan.share.application.VerifyPublicShareService;
 import com.naesan.share.domain.PublicShareCapability;
 
@@ -52,5 +60,30 @@ public class PublicVerificationApiController {
                 .cacheControl(CacheControl.noStore())
                 .header(REFERRER_POLICY_HEADER, NO_REFERRER)
                 .body(response);
+    }
+
+    @PostMapping("/file-match")
+    public ResponseEntity<PublicFileMatchResponse> match(
+            @RequestHeader(name = SHARE_TOKEN_HEADER, required = false)
+            String rawToken,
+            @RequestPart("file") MultipartFile file
+    ) {
+        PublicFileMatchResult result = verifyPublicShareService.match(
+                rawToken,
+                fileContent(file),
+                file.getContentType()
+        );
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(REFERRER_POLICY_HEADER, NO_REFERRER)
+                .body(PublicFileMatchResponse.from(result));
+    }
+
+    private InputStream fileContent(MultipartFile file) {
+        try {
+            return file.getInputStream();
+        } catch (IOException exception) {
+            throw PublicShareException.fileReadFailed(exception);
+        }
     }
 }

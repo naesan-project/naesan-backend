@@ -38,6 +38,11 @@ public class PublicShareApiExceptionHandler {
         HttpStatus status = switch (exception.code()) {
             case PUBLIC_SHARE_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case PUBLIC_SHARE_ALREADY_ACTIVE -> HttpStatus.CONFLICT;
+            case PUBLIC_FILE_EMPTY,
+                    PUBLIC_FILE_TOO_LARGE,
+                    PUBLIC_FILE_UNSUPPORTED,
+                    PUBLIC_FILE_TYPE_MISMATCH,
+                    PUBLIC_FILE_READ_FAILED -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status)
                 .body(new ApiErrorResponse(

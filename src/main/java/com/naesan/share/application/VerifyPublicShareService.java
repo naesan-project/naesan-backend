@@ -1,6 +1,7 @@
 package com.naesan.share.application;
 
 import java.time.Clock;
+import java.io.InputStream;
 import java.util.HexFormat;
 import java.util.Objects;
 
@@ -18,15 +19,18 @@ public class VerifyPublicShareService {
 
     private final PublicShareTokenCodec tokenCodec;
     private final PublicShareVerificationRepository verificationRepository;
+    private final PublicFileMatchVerifier fileMatchVerifier;
     private final Clock clock;
 
     public VerifyPublicShareService(
             PublicShareTokenCodec tokenCodec,
             PublicShareVerificationRepository verificationRepository,
+            PublicFileMatchVerifier fileMatchVerifier,
             Clock clock
     ) {
         this.tokenCodec = Objects.requireNonNull(tokenCodec);
         this.verificationRepository = Objects.requireNonNull(verificationRepository);
+        this.fileMatchVerifier = Objects.requireNonNull(fileMatchVerifier);
         this.clock = Objects.requireNonNull(clock);
     }
 
@@ -70,6 +74,27 @@ public class VerifyPublicShareService {
                 SNAPSHOT_HASH_ALGORITHM,
                 COMMITMENT_HASH_ALGORITHM,
                 COMMITMENT_ENCODING
+        );
+    }
+
+    public PublicFileMatchResult match(
+            String rawToken,
+            InputStream candidateFile,
+            String declaredMediaType
+    ) {
+        PublicShareVerificationSource source = findAvailableSource(rawToken);
+        if (source.publicShare().capability() != PublicShareCapability.FILE_MATCH) {
+            throw PublicShareException.notFound();
+        }
+        boolean matched = fileMatchVerifier.matches(
+                candidateFile,
+                declaredMediaType,
+                source
+        );
+        return new PublicFileMatchResult(
+                matched,
+                PublicTrustStage.from(source.proofState()).name(),
+                HexFormat.of().formatHex(source.commitment())
         );
     }
 }

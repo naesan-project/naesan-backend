@@ -5,6 +5,7 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,6 +42,7 @@ public class PublicShareManagementApiController {
                 request.capability()
         );
         return ResponseEntity.status(HttpStatus.CREATED)
+                .cacheControl(CacheControl.noStore())
                 .body(IssuedPublicShareResponse.from(issuedShare));
     }
 
@@ -56,6 +58,7 @@ public class PublicShareManagementApiController {
                 request.capability()
         );
         return ResponseEntity.status(HttpStatus.CREATED)
+                .cacheControl(CacheControl.noStore())
                 .body(IssuedPublicShareResponse.from(issuedShare));
     }
 
