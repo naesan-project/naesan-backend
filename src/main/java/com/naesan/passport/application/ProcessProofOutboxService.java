@@ -16,9 +16,11 @@ import com.naesan.passport.application.port.out.ProofAnchorReceipt;
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderException;
+import com.naesan.passport.application.port.out.ProofOutboxTelemetry;
 import com.naesan.passport.domain.OutboxClaim;
 import com.naesan.passport.domain.OutboxClaimReason;
 import com.naesan.passport.domain.OutboxEvent;
+import com.naesan.passport.domain.OutboxEventStatus;
 import com.naesan.passport.domain.ProofAnchor;
 
 public class ProcessProofOutboxService {
@@ -32,6 +34,7 @@ public class ProcessProofOutboxService {
     private final Duration leaseDuration;
     private final OutboxRetryPolicy retryPolicy;
     private final Clock clock;
+    private final ProofOutboxTelemetry telemetry;
 
     public ProcessProofOutboxService(
             OutboxEventRepository outboxEventRepository,
@@ -40,7 +43,8 @@ public class ProcessProofOutboxService {
             TransactionTemplate transactionTemplate,
             Duration leaseDuration,
             OutboxRetryPolicy retryPolicy,
-            Clock clock
+            Clock clock,
+            ProofOutboxTelemetry telemetry
     ) {
         this.outboxEventRepository = Objects.requireNonNull(outboxEventRepository);
         this.proofAnchorRepository = Objects.requireNonNull(proofAnchorRepository);
@@ -49,6 +53,7 @@ public class ProcessProofOutboxService {
         this.leaseDuration = Objects.requireNonNull(leaseDuration);
         this.retryPolicy = Objects.requireNonNull(retryPolicy);
         this.clock = Objects.requireNonNull(clock);
+        this.telemetry = Objects.requireNonNull(telemetry);
     }
 
     public boolean processNext(String workerId) {
@@ -64,6 +69,7 @@ public class ProcessProofOutboxService {
         if (claim == null) {
             return false;
         }
+        long processingStartedAt = System.nanoTime();
         OutboxEvent claimedEvent = claim.event();
 
         ProofAnchor proofAnchor = proofAnchorRepository.findById(
@@ -74,7 +80,8 @@ public class ProcessProofOutboxService {
                 ));
         String commitment = HexFormat.of().formatHex(proofAnchor.commitment());
         if (claim.reason() == OutboxClaimReason.RECONCILIATION) {
-            reconcile(claim, proofAnchor, commitment);
+            OutboxEventStatus status = reconcile(claim, proofAnchor, commitment);
+            recordProcessed(claim, status, processingStartedAt);
             return true;
         }
         ProofAnchorReceipt receipt;
@@ -90,21 +97,47 @@ public class ProcessProofOutboxService {
                 transactionTemplate.executeWithoutResult(status ->
                         finalizeAmbiguousFailure(claim, proofAnchor, failure)
                 );
+                recordProcessed(
+                        claim,
+                        OutboxEventStatus.RECONCILE_PENDING,
+                        processingStartedAt
+                );
                 return true;
             }
-            transactionTemplate.executeWithoutResult(status ->
+            OutboxEventStatus status = transactionTemplate.execute(transactionStatus ->
                     finalizeFailure(claim, failure)
             );
+            recordProcessed(claim, status, processingStartedAt);
             return true;
         }
 
         transactionTemplate.executeWithoutResult(status ->
                 finalizeSuccess(claim, proofAnchor, receipt)
         );
+        recordProcessed(claim, OutboxEventStatus.SUCCEEDED, processingStartedAt);
         return true;
     }
 
-    private void reconcile(
+    private void recordProcessed(
+            OutboxClaim claim,
+            OutboxEventStatus status,
+            long processingStartedAt
+    ) {
+        telemetry.recordProcessed(
+                status,
+                claim.event().attemptCount(),
+                Duration.ofNanos(System.nanoTime() - processingStartedAt)
+        );
+    }
+
+    public void refreshStatusMetrics() {
+        var counts = outboxEventRepository.countByStatus();
+        for (OutboxEventStatus status : OutboxEventStatus.values()) {
+            telemetry.updateStatusCount(status, counts.getOrDefault(status, 0L));
+        }
+    }
+
+    private OutboxEventStatus reconcile(
             OutboxClaim claim,
             ProofAnchor proofAnchor,
             String commitment
@@ -117,7 +150,7 @@ public class ProcessProofOutboxService {
             transactionTemplate.executeWithoutResult(status ->
                     finalizeManualReview(claim, proofAnchor, failure)
             );
-            return;
+            return OutboxEventStatus.MANUAL_REVIEW;
         }
 
         Optional<ProofAnchorReceipt> receipt;
@@ -127,7 +160,7 @@ public class ProcessProofOutboxService {
             transactionTemplate.executeWithoutResult(status ->
                     finalizeManualReview(claim, proofAnchor, failure)
             );
-            return;
+            return OutboxEventStatus.MANUAL_REVIEW;
         }
 
         if (receipt.isPresent()) {
@@ -138,9 +171,9 @@ public class ProcessProofOutboxService {
                             receipt.orElseThrow()
                     )
             );
-            return;
+            return OutboxEventStatus.SUCCEEDED;
         }
-        transactionTemplate.executeWithoutResult(status ->
+        return transactionTemplate.execute(status ->
                 finalizeMissingAnchor(claim, proofAnchor)
         );
     }
@@ -163,13 +196,13 @@ public class ProcessProofOutboxService {
                 succeededEvent
         );
         if (!proofConfirmed || !eventCompleted) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 대사 결과를 일관되게 저장하지 못했습니다."
             );
         }
     }
 
-    private void finalizeMissingAnchor(
+    private OutboxEventStatus finalizeMissingAnchor(
             OutboxClaim claim,
             ProofAnchor proofAnchor
     ) {
@@ -190,10 +223,13 @@ public class ProcessProofOutboxService {
                 )
                 : outboxEventRepository.moveToDeadLetter(claim, failure);
         if (!proofPrepared || !eventUpdated) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 재제출 상태를 일관되게 저장하지 못했습니다."
             );
         }
+        return decision.retryAllowed()
+                ? OutboxEventStatus.RETRY_WAIT
+                : OutboxEventStatus.DEAD_LETTER;
     }
 
     private void finalizeManualReview(
@@ -208,7 +244,7 @@ public class ProcessProofOutboxService {
                 failure
         );
         if (!proofUpdated || !eventUpdated) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 수동 검토 상태를 일관되게 저장하지 못했습니다."
             );
         }
@@ -230,19 +266,21 @@ public class ProcessProofOutboxService {
                 failure
         );
         if (!proofUpdated || !eventUpdated) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 대사 상태를 일관되게 저장하지 못했습니다."
             );
         }
     }
 
-    private void finalizeFailure(
+    private OutboxEventStatus finalizeFailure(
             OutboxClaim claim,
             ProofProviderException failure
     ) {
         boolean finalized;
+        OutboxEventStatus finalStatus;
         if (failure.failureType() == ProofFailureType.PERMANENT) {
             finalized = outboxEventRepository.moveToDeadLetter(claim, failure);
+            finalStatus = OutboxEventStatus.DEAD_LETTER;
         } else {
             OutboxRetryDecision decision = retryPolicy.decide(
                     claim.event().attemptCount()
@@ -254,12 +292,16 @@ public class ProcessProofOutboxService {
                             failure
                     )
                     : outboxEventRepository.moveToDeadLetter(claim, failure);
+            finalStatus = decision.retryAllowed()
+                    ? OutboxEventStatus.RETRY_WAIT
+                    : OutboxEventStatus.DEAD_LETTER;
         }
         if (!finalized) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 실패 결과를 일관되게 저장하지 못했습니다."
             );
         }
+        return finalStatus;
     }
 
     private void finalizeSuccess(
@@ -278,9 +320,14 @@ public class ProcessProofOutboxService {
                 succeededEvent
         );
         if (!proofConfirmed || !eventCompleted) {
-            throw new OutboxProcessingException(
+            throw finalizeRejected(
                     "외부 증명 처리 결과를 일관되게 저장하지 못했습니다."
             );
         }
+    }
+
+    private OutboxProcessingException finalizeRejected(String message) {
+        telemetry.recordFinalizeRejected();
+        return new OutboxProcessingException(message);
     }
 }

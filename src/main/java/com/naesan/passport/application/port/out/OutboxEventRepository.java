@@ -1,12 +1,14 @@
 package com.naesan.passport.application.port.out;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.naesan.passport.application.OutboxClaimRequest;
 import com.naesan.passport.domain.OutboxClaim;
 import com.naesan.passport.domain.OutboxEvent;
+import com.naesan.passport.domain.OutboxEventStatus;
 
 public interface OutboxEventRepository {
 
@@ -48,4 +50,6 @@ public interface OutboxEventRepository {
             OutboxEvent previousEvent,
             OutboxEvent reprocessedEvent
     );
+
+    Map<OutboxEventStatus, Long> countByStatus();
 }

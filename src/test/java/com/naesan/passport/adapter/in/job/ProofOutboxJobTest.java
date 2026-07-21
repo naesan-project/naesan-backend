@@ -23,6 +23,7 @@ class ProofOutboxJobTest {
         job.processPendingEvents();
 
         verify(service, times(3)).processNext("worker-1");
+        verify(service).refreshStatusMetrics();
     }
 
     @Test
@@ -35,5 +36,6 @@ class ProofOutboxJobTest {
         job.processPendingEvents();
 
         verify(service, times(2)).processNext("worker-1");
+        verify(service).refreshStatusMetrics();
     }
 }

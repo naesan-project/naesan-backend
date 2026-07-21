@@ -44,5 +44,6 @@ public class ProofOutboxJob {
                 && processProofOutboxService.processNext(workerId)) {
             processedCount++;
         }
+        processProofOutboxService.refreshStatusMetrics();
     }
 }

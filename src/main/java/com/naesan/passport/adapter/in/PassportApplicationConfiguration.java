@@ -26,6 +26,7 @@ import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.passport.application.port.out.PassportQueryRepository;
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
 import com.naesan.passport.application.port.out.ProofAnchorPort;
+import com.naesan.passport.application.port.out.ProofOutboxTelemetry;
 import com.naesan.passport.domain.AnchorCommitmentCalculator;
 
 @Configuration(proxyBeanMethods = false)
@@ -72,7 +73,8 @@ public class PassportApplicationConfiguration {
             @Value("${naesan.proof.worker.lease-duration}")
             Duration leaseDuration,
             OutboxRetryPolicy retryPolicy,
-            Clock clock
+            Clock clock,
+            ProofOutboxTelemetry telemetry
     ) {
         return new ProcessProofOutboxService(
                 outboxEventRepository,
@@ -81,7 +83,8 @@ public class PassportApplicationConfiguration {
                 new TransactionTemplate(transactionManager),
                 leaseDuration,
                 retryPolicy,
-                clock
+                clock,
+                telemetry
         );
     }
 

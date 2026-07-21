@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.BrokenBarrierException;
@@ -41,6 +42,7 @@ import com.naesan.passport.application.port.out.OutboxEventRepository;
 import com.naesan.passport.application.port.out.ProofProviderException;
 import com.naesan.passport.domain.OutboxEvent;
 import com.naesan.passport.domain.OutboxClaim;
+import com.naesan.passport.domain.OutboxEventStatus;
 
 @SpringBootTest
 @Import({
@@ -326,6 +328,11 @@ class IssuePassportTransactionIntegrationTest {
                 OutboxEvent reprocessedEvent
         ) {
             return delegate.reprocess(previousEvent, reprocessedEvent);
+        }
+
+        @Override
+        public Map<OutboxEventStatus, Long> countByStatus() {
+            return delegate.countByStatus();
         }
     }
 

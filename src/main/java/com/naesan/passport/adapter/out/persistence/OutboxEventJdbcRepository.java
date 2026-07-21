@@ -5,6 +5,8 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -208,6 +210,11 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
               AND status = ?
             RETURNING reprocess_count
             """;
+    private static final String COUNT_BY_STATUS = """
+            SELECT status, COUNT(*) AS event_count
+            FROM outbox_events
+            GROUP BY status
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -372,6 +379,21 @@ public class OutboxEventJdbcRepository implements OutboxEventRepository {
                 )
                 .stream()
                 .findFirst();
+    }
+
+    @Override
+    public Map<OutboxEventStatus, Long> countByStatus() {
+        EnumMap<OutboxEventStatus, Long> counts = new EnumMap<>(
+                OutboxEventStatus.class
+        );
+        jdbcTemplate.query(
+                COUNT_BY_STATUS,
+                (resultSet, rowNumber) -> Map.entry(
+                        OutboxEventStatus.valueOf(resultSet.getString("status")),
+                        resultSet.getLong("event_count")
+                )
+        ).forEach(entry -> counts.put(entry.getKey(), entry.getValue()));
+        return counts;
     }
 
     private OutboxEvent mapOutboxEvent(ResultSet resultSet, int rowNumber) throws SQLException {
