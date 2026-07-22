@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -42,6 +43,7 @@ import com.naesan.passport.application.ReprocessProofOutboxService;
 import com.naesan.security.AuthenticatedAccount;
 import com.naesan.passport.support.ControllableProofAnchorAdapter;
 import com.naesan.passport.support.ControllableProofAnchorAdapter.ProofOutcome;
+import com.naesan.share.adapter.in.web.PublicVerificationApiController;
 
 @SpringBootTest(properties =
         "naesan.storage.local.root=build/test-storage/passport-flow")
@@ -82,6 +84,7 @@ class PassportFlowApiIntegrationTest {
     @BeforeEach
     void prepareAccounts() {
         proofAnchorPort.reset();
+        jdbcTemplate.update("DELETE FROM public_shares");
         jdbcTemplate.update("DELETE FROM outbox_reprocess_audit");
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
@@ -177,6 +180,42 @@ class PassportFlowApiIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("JSON API로 Evidence부터 익명 share 검증과 폐기까지 진행한다")
+    void completesPublicShareFlow() throws Exception {
+        UUID evidenceId = createEvidenceDraft();
+        attachEvidenceFile(evidenceId);
+        UUID snapshotId = confirmEvidence(evidenceId);
+        UUID passportId = UUID.fromString(
+                jsonValue(issuePassport(snapshotId), "$.id")
+        );
+        processProofOutboxService.processNext("share-flow-worker");
+
+        MvcResult issuance = issuePublicShare(passportId);
+        UUID shareId = UUID.fromString(jsonValue(issuance, "$.id"));
+        String rawToken = jsonValue(issuance, "$.rawToken");
+
+        mockMvc.perform(get("/api/public/passport-verification")
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                rawToken
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.capability").value("SUMMARY"))
+                .andExpect(jsonPath("$.productName").value("생각등대"))
+                .andExpect(jsonPath("$.trustStage").value("ANCHOR_CONFIRMED"));
+
+        revokePublicShare(passportId, shareId);
+
+        mockMvc.perform(get("/api/public/passport-verification")
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                rawToken
+                        ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PUBLIC_SHARE_NOT_FOUND"));
+    }
+
     private UUID createEvidenceDraft() throws Exception {
         MvcResult result = mockMvc.perform(post("/api/evidence")
                         .with(authentication(ownerAuthentication()))
@@ -235,6 +274,31 @@ class PassportFlowApiIntegrationTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.proof.state").value("PREPARED"))
                 .andReturn();
+    }
+
+    private MvcResult issuePublicShare(UUID passportId) throws Exception {
+        return mockMvc.perform(post(
+                                "/api/passports/{passportId}/shares",
+                                passportId
+                        )
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"capability\":\"SUMMARY\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.rawToken").isString())
+                .andReturn();
+    }
+
+    private void revokePublicShare(UUID passportId, UUID shareId) throws Exception {
+        mockMvc.perform(delete(
+                                "/api/passports/{passportId}/shares/{shareId}",
+                                passportId,
+                                shareId
+                        )
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
     }
 
     private String jsonValue(MvcResult result, String path) throws Exception {
