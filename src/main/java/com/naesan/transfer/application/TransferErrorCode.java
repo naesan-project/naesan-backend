@@ -1,0 +1,10 @@
+package com.naesan.transfer.application;
+
+public enum TransferErrorCode {
+    TRANSFER_NOT_FOUND,
+    TRANSFER_RECIPIENT_NOT_FOUND,
+    TRANSFER_INVALID_RECIPIENT,
+    TRANSFER_SELF_REQUEST,
+    TRANSFER_ALREADY_PENDING,
+    TRANSFER_NOT_PENDING
+}

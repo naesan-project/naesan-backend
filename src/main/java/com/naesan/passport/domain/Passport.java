@@ -82,7 +82,7 @@ public final class Passport {
         );
     }
 
-    public boolean canBeSharedBy(UUID accountId) {
+    public boolean isActiveHolder(UUID accountId) {
         return status == PassportStatus.ACTIVE
                 && currentHolderAccountId.equals(accountId);
     }

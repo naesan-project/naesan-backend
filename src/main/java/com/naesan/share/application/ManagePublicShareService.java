@@ -63,7 +63,7 @@ public class ManagePublicShareService {
             UUID passportId
     ) {
         return passportRepository.findByIdForUpdate(passportId)
-                .filter(passport -> passport.canBeSharedBy(holderAccountId))
+                .filter(passport -> passport.isActiveHolder(holderAccountId))
                 .orElseThrow(PublicShareException::notFound);
     }
 
