@@ -125,10 +125,6 @@ class TransferRequestJdbcRepositoryTest {
 
         assertThat(repository.findPendingByPassportId(PASSPORT_ID)).contains(request);
         assertThat(repository.findByIdForUpdate(request.id())).contains(request);
-        assertThat(repository.findAllByRequesterAccountId(REQUESTER_ACCOUNT_ID))
-                .containsExactly(request);
-        assertThat(repository.findAllByRecipientAccountId(RECIPIENT_ACCOUNT_ID))
-                .containsExactly(request);
     }
 
     @Test

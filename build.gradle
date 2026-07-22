@@ -40,4 +40,5 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    systemProperty 'spring.test.context.cache.maxSize', '4'
 }

@@ -4,7 +4,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,15 +53,6 @@ public class TransferRequestJdbcRepository implements TransferRequestRepository 
     private static final String FIND_PENDING_BY_PASSPORT_ID = SELECT_COLUMNS + """
              WHERE passport_id = ? AND status = 'PENDING'
             """;
-    private static final String FIND_ALL_BY_REQUESTER = SELECT_COLUMNS + """
-             WHERE requester_account_id = ?
-             ORDER BY created_at DESC, id DESC
-            """;
-    private static final String FIND_ALL_BY_RECIPIENT = SELECT_COLUMNS + """
-             WHERE recipient_account_id = ?
-             ORDER BY created_at DESC, id DESC
-            """;
-
     private final JdbcTemplate jdbcTemplate;
 
     public TransferRequestJdbcRepository(JdbcTemplate jdbcTemplate) {
@@ -110,16 +100,6 @@ public class TransferRequestJdbcRepository implements TransferRequestRepository 
         return jdbcTemplate.query(sql, this::mapRequest, id)
                 .stream()
                 .findFirst();
-    }
-
-    @Override
-    public List<TransferRequest> findAllByRequesterAccountId(UUID accountId) {
-        return jdbcTemplate.query(FIND_ALL_BY_REQUESTER, this::mapRequest, accountId);
-    }
-
-    @Override
-    public List<TransferRequest> findAllByRecipientAccountId(UUID accountId) {
-        return jdbcTemplate.query(FIND_ALL_BY_RECIPIENT, this::mapRequest, accountId);
     }
 
     private TransferRequest mapRequest(ResultSet resultSet, int rowNumber) throws SQLException {

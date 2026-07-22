@@ -176,8 +176,15 @@ public final class TransferRequest {
     }
 
     public boolean isPendingAt(Instant checkedAt) {
-        return status == TransferRequestStatus.PENDING
-                && checkedAt.isBefore(expiresAt);
+        return statusAt(checkedAt) == TransferRequestStatus.PENDING;
+    }
+
+    public TransferRequestStatus statusAt(Instant checkedAt) {
+        if (status == TransferRequestStatus.PENDING
+                && !checkedAt.isBefore(expiresAt)) {
+            return TransferRequestStatus.EXPIRED;
+        }
+        return status;
     }
 
     public UUID id() {

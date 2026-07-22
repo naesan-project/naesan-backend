@@ -27,6 +27,8 @@ class TransferRequestTest {
         assertThat(request.version()).isZero();
         assertThat(request.isPendingAt(EXPIRES_AT.minusMillis(1))).isTrue();
         assertThat(request.isPendingAt(EXPIRES_AT)).isFalse();
+        assertThat(request.statusAt(EXPIRES_AT))
+                .isEqualTo(TransferRequestStatus.EXPIRED);
     }
 
     @Test

@@ -3,6 +3,8 @@ package com.naesan.transfer.adapter.in.web;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,6 +18,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
+import com.jayway.jsonpath.JsonPath;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -28,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.naesan.TestcontainersConfiguration;
@@ -120,6 +125,11 @@ class TransferRequestApiIntegrationTest {
     void replacesExpiredRequest() throws Exception {
         insertExpiredRequest();
 
+        mockMvc.perform(get("/api/transfers/incoming")
+                        .with(authentication(recipientAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("EXPIRED"));
+
         mockMvc.perform(createRequest(ownerAuthentication(), RECIPIENT_EMAIL))
                 .andExpect(status().isCreated());
 
@@ -165,6 +175,86 @@ class TransferRequestApiIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"recipientEmail\":\"" + RECIPIENT_EMAIL + "\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("참여자는 incoming·outgoing을 조회하고 수신자는 요청을 거절한다")
+    void listsAndRejectsTransferRequest() throws Exception {
+        UUID requestId = createTransferRequest();
+
+        mockMvc.perform(get("/api/transfers/outgoing")
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(requestId.toString()))
+                .andExpect(jsonPath("$[0].requesterEmail").value(OWNER_EMAIL))
+                .andExpect(jsonPath("$[0].recipientEmail").value(RECIPIENT_EMAIL))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+        mockMvc.perform(get("/api/transfers/incoming")
+                        .with(authentication(recipientAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(requestId.toString()));
+        mockMvc.perform(get("/api/transfers/incoming")
+                        .with(authentication(otherAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/rejection",
+                                requestId
+                        )
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/rejection",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/transfers/outgoing")
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("REJECTED"));
+        mockMvc.perform(delete("/api/transfers/{requestId}", requestId)
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRANSFER_NOT_PENDING"));
+    }
+
+    @Test
+    @DisplayName("요청자만 대기 중인 요청을 취소할 수 있다")
+    void cancelsTransferRequest() throws Exception {
+        UUID requestId = createTransferRequest();
+
+        mockMvc.perform(delete("/api/transfers/{requestId}", requestId)
+                        .with(authentication(otherAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/transfers/{requestId}", requestId)
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM transfer_requests WHERE id = ?",
+                String.class,
+                requestId
+        )).isEqualTo("CANCELLED");
+    }
+
+    private UUID createTransferRequest() throws Exception {
+        MvcResult result = mockMvc.perform(
+                        createRequest(ownerAuthentication(), RECIPIENT_EMAIL)
+                )
+                .andExpect(status().isCreated())
+                .andReturn();
+        String requestId = JsonPath.read(
+                result.getResponse().getContentAsString(),
+                "$.id"
+        );
+        return UUID.fromString(requestId);
     }
 
     private MockHttpServletRequestBuilder createRequest(
@@ -267,6 +357,10 @@ class TransferRequestApiIntegrationTest {
                 OTHER_ACCOUNT_ID,
                 "transfer-other@example.com"
         );
+    }
+
+    private UsernamePasswordAuthenticationToken recipientAuthentication() {
+        return accountAuthentication(RECIPIENT_ACCOUNT_ID, RECIPIENT_EMAIL);
     }
 
     private UsernamePasswordAuthenticationToken accountAuthentication(

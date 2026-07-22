@@ -1,6 +1,5 @@
 package com.naesan.transfer.application.port.out;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,7 +15,4 @@ public interface TransferRequestRepository {
 
     Optional<TransferRequest> findPendingByPassportId(UUID passportId);
 
-    List<TransferRequest> findAllByRequesterAccountId(UUID accountId);
-
-    List<TransferRequest> findAllByRecipientAccountId(UUID accountId);
 }

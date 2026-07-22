@@ -15,7 +15,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import com.naesan.account.adapter.in.web.ApiErrorResponse;
 import com.naesan.transfer.application.TransferException;
 
-@RestControllerAdvice(assignableTypes = TransferApiController.class)
+@RestControllerAdvice(assignableTypes = {
+        TransferApiController.class,
+        TransferManagementApiController.class
+})
 public class TransferApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -10,6 +10,9 @@ import org.springframework.context.annotation.Configuration;
 import com.naesan.account.application.port.out.AccountRepository;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.transfer.application.CreateTransferRequestService;
+import com.naesan.transfer.application.ListTransferRequestsService;
+import com.naesan.transfer.application.ManageTransferRequestService;
+import com.naesan.transfer.application.port.out.TransferRequestQueryRepository;
 import com.naesan.transfer.application.port.out.TransferRequestRepository;
 
 @Configuration(proxyBeanMethods = false)
@@ -30,5 +33,21 @@ public class TransferApplicationConfiguration {
                 timeToLive,
                 clock
         );
+    }
+
+    @Bean
+    ManageTransferRequestService manageTransferRequestService(
+            TransferRequestRepository transferRequestRepository,
+            Clock clock
+    ) {
+        return new ManageTransferRequestService(transferRequestRepository, clock);
+    }
+
+    @Bean
+    ListTransferRequestsService listTransferRequestsService(
+            TransferRequestQueryRepository queryRepository,
+            Clock clock
+    ) {
+        return new ListTransferRequestsService(queryRepository, clock);
     }
 }
