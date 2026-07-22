@@ -19,7 +19,14 @@ public final class OwnershipHistory {
             OwnershipChangeReason reason,
             Instant changedAt
     ) {
-        validate(id, passportId, newHolderAccountId, reason, changedAt);
+        validate(
+                id,
+                passportId,
+                previousHolderAccountId,
+                newHolderAccountId,
+                reason,
+                changedAt
+        );
         this.id = id;
         this.passportId = passportId;
         this.previousHolderAccountId = previousHolderAccountId;
@@ -31,6 +38,7 @@ public final class OwnershipHistory {
     private static void validate(
             UUID id,
             UUID passportId,
+            UUID previousHolderAccountId,
             UUID newHolderAccountId,
             OwnershipChangeReason reason,
             Instant changedAt
@@ -41,6 +49,15 @@ public final class OwnershipHistory {
                 || reason == null
                 || changedAt == null) {
             throw new IllegalArgumentException("소유 이력 필수 값은 null일 수 없습니다.");
+        }
+        if (reason == OwnershipChangeReason.ISSUED
+                && previousHolderAccountId != null) {
+            throw new IllegalArgumentException("최초 발급 이력에는 이전 보유자가 없어야 합니다.");
+        }
+        if (reason == OwnershipChangeReason.TRANSFERRED
+                && (previousHolderAccountId == null
+                || previousHolderAccountId.equals(newHolderAccountId))) {
+            throw new IllegalArgumentException("이전 이력에는 서로 다른 이전·새 보유자가 필요합니다.");
         }
     }
 
@@ -74,6 +91,23 @@ public final class OwnershipHistory {
                 previousHolderAccountId,
                 newHolderAccountId,
                 reason,
+                changedAt
+        );
+    }
+
+    public static OwnershipHistory recordTransfer(
+            UUID id,
+            UUID passportId,
+            UUID previousHolderAccountId,
+            UUID newHolderAccountId,
+            Instant changedAt
+    ) {
+        return new OwnershipHistory(
+                id,
+                passportId,
+                previousHolderAccountId,
+                newHolderAccountId,
+                OwnershipChangeReason.TRANSFERRED,
                 changedAt
         );
     }

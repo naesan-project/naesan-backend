@@ -87,6 +87,27 @@ public final class Passport {
                 && currentHolderAccountId.equals(accountId);
     }
 
+    public Passport transferTo(
+            UUID expectedHolderAccountId,
+            UUID newHolderAccountId
+    ) {
+        if (!isActiveHolder(expectedHolderAccountId)) {
+            throw new IllegalStateException("Passport의 현재 보유자가 변경되었습니다.");
+        }
+        if (newHolderAccountId == null
+                || currentHolderAccountId.equals(newHolderAccountId)) {
+            throw new IllegalArgumentException("새 보유자는 현재 보유자와 달라야 합니다.");
+        }
+        return new Passport(
+                id,
+                snapshotId,
+                newHolderAccountId,
+                status,
+                version + 1,
+                createdAt
+        );
+    }
+
     public UUID id() {
         return id;
     }

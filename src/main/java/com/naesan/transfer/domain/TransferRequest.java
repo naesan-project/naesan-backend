@@ -175,6 +175,14 @@ public final class TransferRequest {
         return transitionTo(TransferRequestStatus.REJECTED, changedAt);
     }
 
+    public TransferRequest acceptBy(UUID accountId, Instant changedAt) {
+        requirePendingAt(changedAt);
+        if (!recipientAccountId.equals(accountId)) {
+            throw new IllegalStateException("수신자만 소유권 이전을 수락할 수 있습니다.");
+        }
+        return transitionTo(TransferRequestStatus.ACCEPTED, changedAt);
+    }
+
     public boolean isPendingAt(Instant checkedAt) {
         return statusAt(checkedAt) == TransferRequestStatus.PENDING;
     }

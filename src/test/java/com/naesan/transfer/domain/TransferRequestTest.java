@@ -69,6 +69,19 @@ class TransferRequestTest {
     }
 
     @Test
+    @DisplayName("수신자는 만료 전에 요청을 수락할 수 있다")
+    void acceptsByRecipient() {
+        TransferRequest acceptedRequest = createRequest().acceptBy(
+                RECIPIENT_ACCOUNT_ID,
+                CREATED_AT.plus(1, ChronoUnit.DAYS)
+        );
+
+        assertThat(acceptedRequest.status())
+                .isEqualTo(TransferRequestStatus.ACCEPTED);
+        assertThat(acceptedRequest.version()).isOne();
+    }
+
+    @Test
     @DisplayName("권한이 없거나 terminal·만료 요청이면 취소와 거절을 거부한다")
     void rejectsInvalidTransition() {
         TransferRequest request = createRequest();
@@ -81,8 +94,16 @@ class TransferRequestTest {
                 REQUESTER_ACCOUNT_ID,
                 CREATED_AT
         )).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> request.acceptBy(
+                REQUESTER_ACCOUNT_ID,
+                CREATED_AT
+        )).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> request.cancelBy(
                 REQUESTER_ACCOUNT_ID,
+                EXPIRES_AT
+        )).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> request.acceptBy(
+                RECIPIENT_ACCOUNT_ID,
                 EXPIRES_AT
         )).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> request.cancelBy(

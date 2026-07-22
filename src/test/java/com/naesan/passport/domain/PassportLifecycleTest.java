@@ -1,6 +1,7 @@
 package com.naesan.passport.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -54,5 +55,67 @@ class PassportLifecycleTest {
         assertThat(history.previousHolderAccountId()).isNull();
         assertThat(history.newHolderAccountId()).isEqualTo(holderAccountId);
         assertThat(history.reason()).isEqualTo(OwnershipChangeReason.ISSUED);
+    }
+
+    @Test
+    @DisplayName("현재 보유자만 Passport를 다른 계정으로 이전한다")
+    void transfersPassportToNewHolder() {
+        UUID passportId = UUID.randomUUID();
+        UUID currentHolderAccountId = UUID.randomUUID();
+        UUID newHolderAccountId = UUID.randomUUID();
+        Passport passport = Passport.issue(
+                passportId,
+                UUID.randomUUID(),
+                currentHolderAccountId,
+                ISSUED_AT
+        );
+
+        Passport transferredPassport = passport.transferTo(
+                currentHolderAccountId,
+                newHolderAccountId
+        );
+        OwnershipHistory history = OwnershipHistory.recordTransfer(
+                UUID.randomUUID(),
+                passportId,
+                currentHolderAccountId,
+                newHolderAccountId,
+                ISSUED_AT.plusSeconds(1)
+        );
+
+        assertThat(transferredPassport.currentHolderAccountId())
+                .isEqualTo(newHolderAccountId);
+        assertThat(transferredPassport.version()).isOne();
+        assertThat(history.previousHolderAccountId())
+                .isEqualTo(currentHolderAccountId);
+        assertThat(history.newHolderAccountId()).isEqualTo(newHolderAccountId);
+        assertThat(history.reason()).isEqualTo(OwnershipChangeReason.TRANSFERRED);
+    }
+
+    @Test
+    @DisplayName("현재 보유자가 다르거나 같은 계정으로 이전하면 거부한다")
+    void rejectsInvalidPassportTransfer() {
+        UUID currentHolderAccountId = UUID.randomUUID();
+        Passport passport = Passport.issue(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                currentHolderAccountId,
+                ISSUED_AT
+        );
+
+        assertThatThrownBy(() -> passport.transferTo(
+                UUID.randomUUID(),
+                UUID.randomUUID()
+        )).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> passport.transferTo(
+                currentHolderAccountId,
+                currentHolderAccountId
+        )).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> OwnershipHistory.recordTransfer(
+                UUID.randomUUID(),
+                passport.id(),
+                currentHolderAccountId,
+                currentHolderAccountId,
+                ISSUED_AT.plusSeconds(1)
+        )).isInstanceOf(IllegalArgumentException.class);
     }
 }
