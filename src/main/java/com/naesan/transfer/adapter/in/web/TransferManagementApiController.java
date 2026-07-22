@@ -13,21 +13,34 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.naesan.security.AuthenticatedAccount;
+import com.naesan.transfer.application.AcceptTransferRequestService;
 import com.naesan.transfer.application.ListTransferRequestsService;
 import com.naesan.transfer.application.ManageTransferRequestService;
 
 @RestController
 @RequestMapping("/api/transfers")
 public class TransferManagementApiController {
+    private final AcceptTransferRequestService acceptTransferRequestService;
     private final ManageTransferRequestService manageTransferRequestService;
     private final ListTransferRequestsService listTransferRequestsService;
 
     public TransferManagementApiController(
+            AcceptTransferRequestService acceptTransferRequestService,
             ManageTransferRequestService manageTransferRequestService,
             ListTransferRequestsService listTransferRequestsService
     ) {
+        this.acceptTransferRequestService = acceptTransferRequestService;
         this.manageTransferRequestService = manageTransferRequestService;
         this.listTransferRequestsService = listTransferRequestsService;
+    }
+
+    @PostMapping("/{requestId}/acceptance")
+    public ResponseEntity<Void> accept(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID requestId
+    ) {
+        acceptTransferRequestService.accept(account.id(), requestId);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{requestId}")

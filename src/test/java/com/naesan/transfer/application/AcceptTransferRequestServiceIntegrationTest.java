@@ -120,6 +120,32 @@ class AcceptTransferRequestServiceIntegrationTest {
         assertThat(activeShareCount()).isOne();
     }
 
+    @Test
+    @DisplayName("요청 이후 holder가 바뀌면 accept를 거부한다")
+    void rejectsChangedHolder() {
+        jdbcTemplate.update(
+                """
+                UPDATE passports
+                SET current_holder_account_id = ?, version = 1
+                WHERE id = ?
+                """,
+                RECIPIENT_ACCOUNT_ID,
+                PASSPORT_ID
+        );
+
+        assertThatThrownBy(() -> service.accept(
+                RECIPIENT_ACCOUNT_ID,
+                TRANSFER_REQUEST_ID
+        ))
+                .isInstanceOf(TransferException.class)
+                .extracting(exception -> ((TransferException) exception).code())
+                .isEqualTo(TransferErrorCode.TRANSFER_HOLDER_CHANGED);
+
+        assertThat(transferStatus()).isEqualTo("PENDING");
+        assertThat(transferredHistoryCount()).isZero();
+        assertThat(activeShareCount()).isOne();
+    }
+
     private UUID currentHolderAccountId() {
         return jdbcTemplate.queryForObject(
                 "SELECT current_holder_account_id FROM passports WHERE id = ?",

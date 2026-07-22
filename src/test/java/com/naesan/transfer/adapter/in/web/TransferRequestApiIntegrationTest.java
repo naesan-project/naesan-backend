@@ -37,6 +37,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.security.AuthenticatedAccount;
+import com.naesan.share.adapter.in.web.PublicVerificationApiController;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -244,6 +245,104 @@ class TransferRequestApiIntegrationTest {
         )).isEqualTo("CANCELLED");
     }
 
+    @Test
+    @DisplayName("recipient 수락은 holder를 변경하고 기존 공개 share를 폐기한다")
+    void acceptsTransferRequestAndRevokesShare() throws Exception {
+        String rawShareToken = issuePublicShare();
+        UUID requestId = createTransferRequest();
+
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication())))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRANSFER_NOT_PENDING"));
+        mockMvc.perform(get("/api/transfers/outgoing")
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("ACCEPTED"));
+        mockMvc.perform(get("/api/public/passport-verification")
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                rawShareToken
+                        ))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PUBLIC_SHARE_NOT_FOUND"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT current_holder_account_id FROM passports WHERE id = ?",
+                UUID.class,
+                PASSPORT_ID
+        )).isEqualTo(RECIPIENT_ACCOUNT_ID);
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM ownership_history
+                WHERE passport_id = ? AND reason = 'TRANSFERRED'
+                """,
+                Integer.class,
+                PASSPORT_ID
+        )).isOne();
+    }
+
+    @Test
+    @DisplayName("만료된 요청은 recipient도 수락할 수 없다")
+    void rejectsExpiredTransferAcceptance() throws Exception {
+        UUID requestId = insertExpiredRequest();
+
+        mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication()))
+                        .with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("TRANSFER_NOT_PENDING"));
+    }
+
+    private String issuePublicShare() throws Exception {
+        MvcResult result = mockMvc.perform(post(
+                                "/api/passports/{passportId}/shares",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(ownerAuthentication()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"capability\":\"SUMMARY\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return JsonPath.read(result.getResponse().getContentAsString(), "$.rawToken");
+    }
+
     private UUID createTransferRequest() throws Exception {
         MvcResult result = mockMvc.perform(
                         createRequest(ownerAuthentication(), RECIPIENT_EMAIL)
@@ -268,8 +367,9 @@ class TransferRequestApiIntegrationTest {
                 .content("{\"recipientEmail\":\"" + recipientEmail + "\"}");
     }
 
-    private void insertExpiredRequest() {
+    private UUID insertExpiredRequest() {
         Instant expiredAt = Instant.now().minus(1, ChronoUnit.DAYS);
+        UUID requestId = UUID.randomUUID();
         jdbcTemplate.update(
                 """
                 INSERT INTO transfer_requests (
@@ -278,7 +378,7 @@ class TransferRequestApiIntegrationTest {
                 )
                 VALUES (?, ?, ?, ?, 'PENDING', 0, ?, ?, ?)
                 """,
-                UUID.randomUUID(),
+                requestId,
                 PASSPORT_ID,
                 OWNER_ACCOUNT_ID,
                 RECIPIENT_ACCOUNT_ID,
@@ -286,6 +386,7 @@ class TransferRequestApiIntegrationTest {
                 expiredAt.minus(7, ChronoUnit.DAYS).atOffset(ZoneOffset.UTC),
                 expiredAt.minus(7, ChronoUnit.DAYS).atOffset(ZoneOffset.UTC)
         );
+        return requestId;
     }
 
     private void insertAccount(UUID accountId, String email, String status) {
