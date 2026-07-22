@@ -48,7 +48,9 @@ public class TransferApiExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleTransfer(TransferException exception) {
         HttpStatus status = switch (exception.code()) {
             case TRANSFER_NOT_FOUND, TRANSFER_RECIPIENT_NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case TRANSFER_ALREADY_PENDING, TRANSFER_NOT_PENDING -> HttpStatus.CONFLICT;
+            case TRANSFER_ALREADY_PENDING,
+                    TRANSFER_NOT_PENDING,
+                    TRANSFER_HOLDER_CHANGED -> HttpStatus.CONFLICT;
             case TRANSFER_INVALID_RECIPIENT, TRANSFER_SELF_REQUEST -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status)

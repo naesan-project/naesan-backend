@@ -50,6 +50,13 @@ public final class TransferException extends RuntimeException {
         );
     }
 
+    public static TransferException holderChanged() {
+        return new TransferException(
+                TransferErrorCode.TRANSFER_HOLDER_CHANGED,
+                "소유권 이전 요청 이후 Passport 보유자가 변경되었습니다."
+        );
+    }
+
     public TransferErrorCode code() {
         return code;
     }

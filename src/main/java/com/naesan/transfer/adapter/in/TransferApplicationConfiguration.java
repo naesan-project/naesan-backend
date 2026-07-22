@@ -8,7 +8,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.naesan.account.application.port.out.AccountRepository;
+import com.naesan.passport.application.port.out.OwnershipHistoryRepository;
 import com.naesan.passport.application.port.out.PassportRepository;
+import com.naesan.share.application.port.out.PublicShareRepository;
+import com.naesan.transfer.application.AcceptTransferRequestService;
 import com.naesan.transfer.application.CreateTransferRequestService;
 import com.naesan.transfer.application.ListTransferRequestsService;
 import com.naesan.transfer.application.ManageTransferRequestService;
@@ -41,6 +44,23 @@ public class TransferApplicationConfiguration {
             Clock clock
     ) {
         return new ManageTransferRequestService(transferRequestRepository, clock);
+    }
+
+    @Bean
+    AcceptTransferRequestService acceptTransferRequestService(
+            TransferRequestRepository transferRequestRepository,
+            PassportRepository passportRepository,
+            OwnershipHistoryRepository ownershipHistoryRepository,
+            PublicShareRepository publicShareRepository,
+            Clock clock
+    ) {
+        return new AcceptTransferRequestService(
+                transferRequestRepository,
+                passportRepository,
+                ownershipHistoryRepository,
+                publicShareRepository,
+                clock
+        );
     }
 
     @Bean
