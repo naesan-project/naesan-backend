@@ -37,6 +37,8 @@ import com.naesan.passport.domain.ProofAnchor;
 class PassportPersistenceTest {
     private static final UUID ACCOUNT_ID =
             UUID.fromString("d20c2a01-4f15-4daf-a252-b936002c6540");
+    private static final UUID NEW_HOLDER_ACCOUNT_ID =
+            UUID.fromString("c6899041-e95a-45a5-9769-5691ceef1e0b");
     private static final UUID EVIDENCE_ID =
             UUID.fromString("66af044b-daa9-4ae3-9469-6b1fae889848");
     private static final UUID SNAPSHOT_ID =
@@ -174,5 +176,58 @@ class PassportPersistenceTest {
                             .isEqualTo(outboxEvent.dispatchKey());
                     assertThat(savedEvent.payload()).contains("\"commitment\"");
                 });
+    }
+
+    @Test
+    @DisplayName("Passport holder와 version을 조건부 갱신하고 이전 이력을 append한다")
+    void updatesPassportHolderAndAppendsHistory() {
+        insertNewHolderAccount();
+        Passport passport = Passport.issue(
+                PASSPORT_ID,
+                SNAPSHOT_ID,
+                ACCOUNT_ID,
+                CREATED_AT
+        );
+        passportRepository.save(passport);
+        Passport transferredPassport = passport.transferTo(
+                ACCOUNT_ID,
+                NEW_HOLDER_ACCOUNT_ID
+        );
+        OwnershipHistory history = OwnershipHistory.recordTransfer(
+                UUID.randomUUID(),
+                PASSPORT_ID,
+                ACCOUNT_ID,
+                NEW_HOLDER_ACCOUNT_ID,
+                CREATED_AT.plusSeconds(1)
+        );
+
+        assertThat(passportRepository.update(transferredPassport, 0)).isTrue();
+        ownershipHistoryRepository.append(history);
+
+        assertThat(passportRepository.findById(PASSPORT_ID))
+                .contains(transferredPassport);
+        assertThat(passportRepository.update(passport, 0)).isFalse();
+        assertThat(ownershipHistoryRepository.findAllByPassportId(PASSPORT_ID))
+                .singleElement()
+                .satisfies(savedHistory -> {
+                    assertThat(savedHistory.previousHolderAccountId())
+                            .isEqualTo(ACCOUNT_ID);
+                    assertThat(savedHistory.newHolderAccountId())
+                            .isEqualTo(NEW_HOLDER_ACCOUNT_ID);
+                    assertThat(savedHistory.reason())
+                            .isEqualTo(OwnershipChangeReason.TRANSFERRED);
+                });
+    }
+
+    private void insertNewHolderAccount() {
+        jdbcTemplate.update(
+                """
+                INSERT INTO accounts (id, email, password_hash, status, created_at)
+                VALUES (?, 'passport-new-holder@example.com', ?, 'ACTIVE', ?)
+                """,
+                NEW_HOLDER_ACCOUNT_ID,
+                BCRYPT_HASH,
+                CREATED_AT.atOffset(ZoneOffset.UTC)
+        );
     }
 }

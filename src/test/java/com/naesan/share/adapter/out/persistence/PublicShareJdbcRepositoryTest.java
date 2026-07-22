@@ -137,4 +137,31 @@ class PublicShareJdbcRepositoryTest {
                 .hasValueSatisfying(foundShare -> assertThat(foundShare.revokedAt())
                         .isEqualTo(revokedShare.revokedAt()));
     }
+
+    @Test
+    @DisplayName("Passport의 활성 share를 한 번에 폐기한다")
+    void revokesAllActiveSharesByPassport() {
+        byte[] tokenHash = new byte[32];
+        PublicShare share = PublicShare.issue(
+                UUID.randomUUID(),
+                PASSPORT_ID,
+                tokenHash,
+                PublicShareCapability.SUMMARY,
+                CREATED_AT.plus(7, ChronoUnit.DAYS),
+                CREATED_AT
+        );
+        repository.save(share);
+        Instant revokedAt = CREATED_AT.plus(1, ChronoUnit.HOURS);
+
+        int revokedShareCount = repository.revokeAllByPassportId(
+                PASSPORT_ID,
+                revokedAt
+        );
+
+        assertThat(revokedShareCount).isOne();
+        assertThat(repository.findUnrevokedByPassportId(PASSPORT_ID)).isEmpty();
+        assertThat(repository.findByTokenHash(tokenHash))
+                .hasValueSatisfying(foundShare -> assertThat(foundShare.revokedAt())
+                        .isEqualTo(revokedAt));
+    }
 }

@@ -10,6 +10,8 @@ public interface PassportRepository {
 
     void save(Passport passport);
 
+    boolean update(Passport passport, long expectedVersion);
+
     Optional<Passport> findById(UUID passportId);
 
     Optional<Passport> findByIdForUpdate(UUID passportId);

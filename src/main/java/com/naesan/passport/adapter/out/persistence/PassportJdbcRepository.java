@@ -40,6 +40,11 @@ public class PassportJdbcRepository implements PassportRepository {
             )
             VALUES (?, ?, ?, ?, ?, ?)
             """;
+    private static final String UPDATE_PASSPORT = """
+            UPDATE passports
+            SET current_holder_account_id = ?, version = ?
+            WHERE id = ? AND version = ?
+            """;
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_ID_FOR_UPDATE =
             SELECT_COLUMNS + " WHERE id = ? FOR UPDATE";
@@ -71,6 +76,18 @@ public class PassportJdbcRepository implements PassportRepository {
         } catch (DuplicateKeyException exception) {
             throw PassportException.alreadyIssued();
         }
+    }
+
+    @Override
+    public boolean update(Passport passport, long expectedVersion) {
+        int updatedRowCount = jdbcTemplate.update(
+                UPDATE_PASSPORT,
+                passport.currentHolderAccountId(),
+                passport.version(),
+                passport.id(),
+                expectedVersion
+        );
+        return updatedRowCount == 1;
     }
 
     @Override

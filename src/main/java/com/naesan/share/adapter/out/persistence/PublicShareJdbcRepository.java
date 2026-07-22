@@ -45,6 +45,11 @@ public class PublicShareJdbcRepository implements PublicShareRepository {
             SET revoked_at = ?
             WHERE id = ?
             """;
+    private static final String REVOKE_ALL_BY_PASSPORT_ID = """
+            UPDATE public_shares
+            SET revoked_at = ?
+            WHERE passport_id = ? AND revoked_at IS NULL
+            """;
     private static final String FIND_BY_ID_AND_PASSPORT_ID = SELECT_COLUMNS + """
              WHERE id = ? AND passport_id = ?
             """;
@@ -81,6 +86,15 @@ public class PublicShareJdbcRepository implements PublicShareRepository {
                 UPDATE_SHARE,
                 toOffsetDateTime(publicShare.revokedAt()),
                 publicShare.id()
+        );
+    }
+
+    @Override
+    public int revokeAllByPassportId(UUID passportId, Instant revokedAt) {
+        return jdbcTemplate.update(
+                REVOKE_ALL_BY_PASSPORT_ID,
+                revokedAt.atOffset(ZoneOffset.UTC),
+                passportId
         );
     }
 

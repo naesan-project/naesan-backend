@@ -133,6 +133,27 @@ class PassportOutboxSchemaTest {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    @Test
+    @DisplayName("이전 소유 이력에는 서로 다른 이전·새 보유자가 필요하다")
+    void rejectsInvalidOwnershipTransfer() {
+        UUID passportId = insertPassport(UUID.randomUUID());
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO ownership_history (
+                    id, passport_id, previous_holder_account_id,
+                    new_holder_account_id, reason, changed_at
+                )
+                VALUES (?, ?, ?, ?, 'TRANSFERRED', ?)
+                """,
+                UUID.randomUUID(),
+                passportId,
+                ACCOUNT_ID,
+                ACCOUNT_ID,
+                CREATED_AT.atOffset(ZoneOffset.UTC)
+        )).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     private UUID insertPassport(UUID passportId) {
         jdbcTemplate.update(
                 """
