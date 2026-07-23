@@ -8,12 +8,20 @@ import static org.mockito.Mockito.doThrow;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +29,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
@@ -29,8 +40,12 @@ import com.naesan.TestcontainersConfiguration;
 import com.naesan.share.application.port.out.PublicShareRepository;
 
 @SpringBootTest
-@Import(TestcontainersConfiguration.class)
+@Import({
+        TestcontainersConfiguration.class,
+        AcceptTransferRequestServiceIntegrationTest.FixedClockConfiguration.class
+})
 class AcceptTransferRequestServiceIntegrationTest {
+    private static final int CONCURRENT_ACCEPT_COUNT = 20;
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("321d3661-8510-4c05-b8b8-b74221799d2d");
     private static final UUID RECIPIENT_ACCOUNT_ID =
@@ -45,6 +60,7 @@ class AcceptTransferRequestServiceIntegrationTest {
             UUID.fromString("891442cf-a714-4584-b4c3-5bd59956df2b");
     private static final String BCRYPT_HASH = "$2a$12$" + "a".repeat(53);
     private static final Instant CREATED_AT = Instant.parse("2026-07-22T00:00:00Z");
+    private static final Instant CURRENT_TIME = Instant.parse("2026-07-24T00:00:00Z");
 
     private final AcceptTransferRequestService service;
     private final JdbcTemplate jdbcTemplate;
@@ -144,6 +160,62 @@ class AcceptTransferRequestServiceIntegrationTest {
         assertThat(transferStatus()).isEqualTo("PENDING");
         assertThat(transferredHistoryCount()).isZero();
         assertThat(activeShareCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("동일 요청을 20명이 동시에 수락해도 한 건만 성공한다")
+    void acceptsOneOfTwentyConcurrentAttempts() throws Exception {
+        CountDownLatch workersReady = new CountDownLatch(CONCURRENT_ACCEPT_COUNT);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<AcceptOutcome>> attempts = new ArrayList<>();
+
+        try (ExecutorService executor =
+                Executors.newFixedThreadPool(CONCURRENT_ACCEPT_COUNT)) {
+            for (int count = 0; count < CONCURRENT_ACCEPT_COUNT; count++) {
+                attempts.add(executor.submit(
+                        () -> acceptAfterStart(workersReady, start)
+                ));
+            }
+
+            boolean allWorkersReady = workersReady.await(10, TimeUnit.SECONDS);
+            start.countDown();
+            assertThat(allWorkersReady).isTrue();
+
+            List<AcceptOutcome> outcomes = new ArrayList<>();
+            for (Future<AcceptOutcome> attempt : attempts) {
+                outcomes.add(attempt.get(20, TimeUnit.SECONDS));
+            }
+
+            assertThat(outcomes)
+                    .filteredOn(AcceptOutcome.SUCCESS::equals)
+                    .hasSize(1);
+            assertThat(outcomes)
+                    .filteredOn(AcceptOutcome.NOT_PENDING::equals)
+                    .hasSize(CONCURRENT_ACCEPT_COUNT - 1);
+        }
+
+        assertThat(currentHolderAccountId()).isEqualTo(RECIPIENT_ACCOUNT_ID);
+        assertThat(passportVersion()).isOne();
+        assertThat(transferStatus()).isEqualTo("ACCEPTED");
+        assertThat(transferVersion()).isOne();
+        assertThat(transferredHistoryCount()).isOne();
+        assertThat(activeShareCount()).isZero();
+    }
+
+    private AcceptOutcome acceptAfterStart(
+            CountDownLatch workersReady,
+            CountDownLatch start
+    ) throws InterruptedException {
+        workersReady.countDown();
+        start.await();
+        try {
+            service.accept(RECIPIENT_ACCOUNT_ID, TRANSFER_REQUEST_ID);
+            return AcceptOutcome.SUCCESS;
+        } catch (TransferException exception) {
+            assertThat(exception.code())
+                    .isEqualTo(TransferErrorCode.TRANSFER_NOT_PENDING);
+            return AcceptOutcome.NOT_PENDING;
+        }
     }
 
     private UUID currentHolderAccountId() {
@@ -311,5 +383,20 @@ class AcceptTransferRequestServiceIntegrationTest {
                 offset(CREATED_AT),
                 offset(CREATED_AT)
         );
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FixedClockConfiguration {
+
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(CURRENT_TIME, ZoneOffset.UTC);
+        }
+    }
+
+    private enum AcceptOutcome {
+        SUCCESS,
+        NOT_PENDING
     }
 }
