@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -162,7 +163,7 @@ class AcceptTransferRequestServiceIntegrationTest {
         assertThat(activeShareCount()).isOne();
     }
 
-    @Test
+    @RepeatedTest(10)
     @DisplayName("동일 요청을 20명이 동시에 수락해도 한 건만 성공한다")
     void acceptsOneOfTwentyConcurrentAttempts() throws Exception {
         CountDownLatch workersReady = new CountDownLatch(CONCURRENT_ACCEPT_COUNT);

@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.TestReporter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -102,7 +102,7 @@ class TransferConcurrencyIntegrationTest {
         insertExpiredTransferRequest();
     }
 
-    @Test
+    @RepeatedTest(10)
     @DisplayName("만료 경계의 accept와 새 요청은 같은 잠금 순서로 직렬화된다")
     void serializesExpiryBoundaryRace(TestReporter testReporter) throws Exception {
         CountDownLatch createLockedPassport = new CountDownLatch(1);
