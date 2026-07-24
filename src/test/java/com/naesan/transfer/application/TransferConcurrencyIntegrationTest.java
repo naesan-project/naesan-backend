@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestReporter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -108,7 +109,7 @@ class TransferConcurrencyIntegrationTest {
         CountDownLatch createLockedPassport = new CountDownLatch(1);
         CountDownLatch acceptWaitingForPassport = new CountDownLatch(1);
         CountDownLatch continueCreate = new CountDownLatch(1);
-        blockCreateAfterPassportLock(
+        blockFirstPassportLock(
                 createLockedPassport,
                 acceptWaitingForPassport,
                 continueCreate
@@ -152,20 +153,20 @@ class TransferConcurrencyIntegrationTest {
         assertThat(transferredHistoryCount()).isZero();
     }
 
-    private void blockCreateAfterPassportLock(
-            CountDownLatch createLockedPassport,
-            CountDownLatch acceptWaitingForPassport,
-            CountDownLatch continueCreate
+    private void blockFirstPassportLock(
+            CountDownLatch firstPassportLocked,
+            CountDownLatch secondAttemptWaiting,
+            CountDownLatch continueFirstAttempt
     ) {
         AtomicInteger invocationCount = new AtomicInteger();
         doAnswer(invocation -> {
             if (invocationCount.incrementAndGet() == 1) {
                 Object result = invocation.callRealMethod();
-                createLockedPassport.countDown();
-                await(continueCreate);
+                firstPassportLocked.countDown();
+                await(continueFirstAttempt);
                 return result;
             }
-            acceptWaitingForPassport.countDown();
+            secondAttemptWaiting.countDown();
             return invocation.callRealMethod();
         }).when(passportRepository).findByIdForUpdate(eq(PASSPORT_ID));
     }
@@ -178,6 +179,65 @@ class TransferConcurrencyIntegrationTest {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("동시성 baseline 대기가 중단되었습니다.", exception);
+        }
+    }
+
+    @Test
+    @DisplayName("만료 직전 accept가 먼저 잠그면 새 요청 없이 이전을 완료한다")
+    void completesAcceptanceThatWinsExpiryBoundaryRace() throws Exception {
+        CountDownLatch acceptLockedPassport = new CountDownLatch(1);
+        CountDownLatch createWaitingForPassport = new CountDownLatch(1);
+        CountDownLatch continueAccept = new CountDownLatch(1);
+        blockFirstPassportLock(
+                acceptLockedPassport,
+                createWaitingForPassport,
+                continueAccept
+        );
+        clock.set(BEFORE_EXPIRY);
+
+        List<RaceOutcome> outcomes;
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<RaceOutcome> acceptAttempt =
+                    executor.submit(this::acceptExpiredRequest);
+            assertThat(acceptLockedPassport.await(10, TimeUnit.SECONDS))
+                    .isTrue();
+
+            Future<RaceOutcome> createAttempt =
+                    executor.submit(this::createAfterOwnershipTransfer);
+            assertThat(createWaitingForPassport.await(10, TimeUnit.SECONDS))
+                    .isTrue();
+
+            continueAccept.countDown();
+            outcomes = List.of(
+                    acceptAttempt.get(20, TimeUnit.SECONDS),
+                    createAttempt.get(20, TimeUnit.SECONDS)
+            );
+        } finally {
+            continueAccept.countDown();
+        }
+
+        assertThat(outcomes).containsExactly(
+                RaceOutcome.ACCEPTED,
+                RaceOutcome.NOT_OWNER
+        );
+        assertThat(transferStatus(TRANSFER_REQUEST_ID)).isEqualTo("ACCEPTED");
+        assertThat(pendingRequestCount()).isZero();
+        assertThat(currentHolderAccountId()).isEqualTo(RECIPIENT_ACCOUNT_ID);
+        assertThat(transferredHistoryCount()).isOne();
+    }
+
+    private RaceOutcome createAfterOwnershipTransfer() {
+        try {
+            createService.create(
+                    OWNER_ACCOUNT_ID,
+                    PASSPORT_ID,
+                    NEXT_RECIPIENT_EMAIL
+            );
+            return RaceOutcome.CREATED;
+        } catch (TransferException exception) {
+            assertThat(exception.code())
+                    .isEqualTo(TransferErrorCode.TRANSFER_NOT_FOUND);
+            return RaceOutcome.NOT_OWNER;
         }
     }
 
@@ -407,6 +467,7 @@ class TransferConcurrencyIntegrationTest {
     private enum RaceOutcome {
         CREATED,
         ACCEPTED,
-        NOT_PENDING
+        NOT_PENDING,
+        NOT_OWNER
     }
 }
