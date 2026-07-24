@@ -73,6 +73,11 @@ public class AcceptTransferRequestService {
                 .orElseThrow(TransferException::notFound);
     }
 
+    private Passport findPassport(UUID passportId) {
+        return passportRepository.findByIdForUpdate(passportId)
+                .orElseThrow(TransferException::notFound);
+    }
+
     private TransferRequest findRecipientRequestForUpdate(
             UUID recipientAccountId,
             UUID requestId
@@ -97,11 +102,6 @@ public class AcceptTransferRequestService {
         } catch (IllegalStateException exception) {
             throw TransferException.notPending();
         }
-    }
-
-    private Passport findPassport(UUID passportId) {
-        return passportRepository.findByIdForUpdate(passportId)
-                .orElseThrow(TransferException::notFound);
     }
 
     private Passport transferPassport(

@@ -174,11 +174,34 @@ class TransferConcurrencyIntegrationTest {
     private void await(CountDownLatch latch) {
         try {
             if (!latch.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("동시성 baseline 대기 시간이 초과되었습니다.");
+                throw new IllegalStateException("동시성 테스트 대기 시간이 초과되었습니다.");
             }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("동시성 baseline 대기가 중단되었습니다.", exception);
+            throw new IllegalStateException("동시성 테스트 대기가 중단되었습니다.", exception);
+        }
+    }
+
+    private RaceOutcome createNextRequest() {
+        createService.create(
+                OWNER_ACCOUNT_ID,
+                PASSPORT_ID,
+                NEXT_RECIPIENT_EMAIL
+        );
+        return RaceOutcome.CREATED;
+    }
+
+    private RaceOutcome acceptExpiredRequest() {
+        try {
+            acceptService.accept(
+                    RECIPIENT_ACCOUNT_ID,
+                    TRANSFER_REQUEST_ID
+            );
+            return RaceOutcome.ACCEPTED;
+        } catch (TransferException exception) {
+            assertThat(exception.code())
+                    .isEqualTo(TransferErrorCode.TRANSFER_NOT_PENDING);
+            return RaceOutcome.NOT_PENDING;
         }
     }
 
@@ -238,29 +261,6 @@ class TransferConcurrencyIntegrationTest {
             assertThat(exception.code())
                     .isEqualTo(TransferErrorCode.TRANSFER_NOT_FOUND);
             return RaceOutcome.NOT_OWNER;
-        }
-    }
-
-    private RaceOutcome createNextRequest() {
-        createService.create(
-                OWNER_ACCOUNT_ID,
-                PASSPORT_ID,
-                NEXT_RECIPIENT_EMAIL
-        );
-        return RaceOutcome.CREATED;
-    }
-
-    private RaceOutcome acceptExpiredRequest() {
-        try {
-            acceptService.accept(
-                    RECIPIENT_ACCOUNT_ID,
-                    TRANSFER_REQUEST_ID
-            );
-            return RaceOutcome.ACCEPTED;
-        } catch (TransferException exception) {
-            assertThat(exception.code())
-                    .isEqualTo(TransferErrorCode.TRANSFER_NOT_PENDING);
-            return RaceOutcome.NOT_PENDING;
         }
     }
 
