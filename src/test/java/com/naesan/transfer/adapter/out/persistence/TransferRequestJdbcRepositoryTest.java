@@ -123,7 +123,9 @@ class TransferRequestJdbcRepositoryTest {
 
         repository.save(request);
 
-        assertThat(repository.findPendingByPassportId(PASSPORT_ID)).contains(request);
+        assertThat(repository.findById(request.id())).contains(request);
+        assertThat(repository.findPendingByPassportIdForUpdate(PASSPORT_ID))
+                .contains(request);
         assertThat(repository.findByIdForUpdate(request.id())).contains(request);
     }
 
@@ -141,7 +143,8 @@ class TransferRequestJdbcRepositoryTest {
 
         assertThat(repository.findByIdForUpdate(request.id()))
                 .contains(cancelledRequest);
-        assertThat(repository.findPendingByPassportId(PASSPORT_ID)).isEmpty();
+        assertThat(repository.findPendingByPassportIdForUpdate(PASSPORT_ID))
+                .isEmpty();
     }
 
     @Test

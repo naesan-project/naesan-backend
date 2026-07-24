@@ -11,8 +11,10 @@ public interface TransferRequestRepository {
 
     void update(TransferRequest request);
 
+    Optional<TransferRequest> findById(UUID requestId);
+
     Optional<TransferRequest> findByIdForUpdate(UUID requestId);
 
-    Optional<TransferRequest> findPendingByPassportId(UUID passportId);
+    Optional<TransferRequest> findPendingByPassportIdForUpdate(UUID passportId);
 
 }

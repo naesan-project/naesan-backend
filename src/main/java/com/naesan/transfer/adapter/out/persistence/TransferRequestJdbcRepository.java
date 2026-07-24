@@ -48,10 +48,14 @@ public class TransferRequestJdbcRepository implements TransferRequestRepository 
             SET status = ?, version = ?, updated_at = ?
             WHERE id = ?
             """;
+    private static final String FIND_BY_ID =
+            SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_ID_FOR_UPDATE =
             SELECT_COLUMNS + " WHERE id = ? FOR UPDATE";
-    private static final String FIND_PENDING_BY_PASSPORT_ID = SELECT_COLUMNS + """
+    private static final String FIND_PENDING_BY_PASSPORT_ID_FOR_UPDATE =
+            SELECT_COLUMNS + """
              WHERE passport_id = ? AND status = 'PENDING'
+             FOR UPDATE
             """;
     private final JdbcTemplate jdbcTemplate;
 
@@ -87,13 +91,20 @@ public class TransferRequestJdbcRepository implements TransferRequestRepository 
     }
 
     @Override
+    public Optional<TransferRequest> findById(UUID requestId) {
+        return findOne(FIND_BY_ID, requestId);
+    }
+
+    @Override
     public Optional<TransferRequest> findByIdForUpdate(UUID requestId) {
         return findOne(FIND_BY_ID_FOR_UPDATE, requestId);
     }
 
     @Override
-    public Optional<TransferRequest> findPendingByPassportId(UUID passportId) {
-        return findOne(FIND_PENDING_BY_PASSPORT_ID, passportId);
+    public Optional<TransferRequest> findPendingByPassportIdForUpdate(
+            UUID passportId
+    ) {
+        return findOne(FIND_PENDING_BY_PASSPORT_ID_FOR_UPDATE, passportId);
     }
 
     private Optional<TransferRequest> findOne(String sql, UUID id) {

@@ -6,7 +6,6 @@ import static org.mockito.Mockito.doAnswer;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,21 +33,18 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.port.out.PassportRepository;
-import com.naesan.transfer.application.port.out.TransferRequestRepository;
 
 @SpringBootTest
 @Import({
         TestcontainersConfiguration.class,
-        TransferConcurrencyBaselineIntegrationTest.FixedClockConfiguration.class
+        TransferConcurrencyIntegrationTest.FixedClockConfiguration.class
 })
-class TransferConcurrencyBaselineIntegrationTest {
-    private static final String DEADLOCK_SQL_STATE = "40P01";
+class TransferConcurrencyIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("094c4450-1663-4bd7-a123-cc1477e7e25e");
     private static final UUID RECIPIENT_ACCOUNT_ID =
@@ -83,11 +79,8 @@ class TransferConcurrencyBaselineIntegrationTest {
     @MockitoSpyBean
     private PassportRepository passportRepository;
 
-    @MockitoSpyBean
-    private TransferRequestRepository transferRequestRepository;
-
     @Autowired
-    TransferConcurrencyBaselineIntegrationTest(
+    TransferConcurrencyIntegrationTest(
             CreateTransferRequestService createService,
             AcceptTransferRequestService acceptService,
             JdbcTemplate jdbcTemplate,
@@ -110,19 +103,16 @@ class TransferConcurrencyBaselineIntegrationTest {
     }
 
     @Test
-    @DisplayName("만료 경계를 교차한 accept와 새 요청의 역순 잠금은 deadlock을 만든다")
-    void observesDeadlockFromReverseLockOrder(TestReporter testReporter) throws Exception {
+    @DisplayName("만료 경계의 accept와 새 요청은 같은 잠금 순서로 직렬화된다")
+    void serializesExpiryBoundaryRace(TestReporter testReporter) throws Exception {
         CountDownLatch createLockedPassport = new CountDownLatch(1);
-        CountDownLatch acceptLockedRequest = new CountDownLatch(1);
         CountDownLatch acceptWaitingForPassport = new CountDownLatch(1);
         CountDownLatch continueCreate = new CountDownLatch(1);
-        CountDownLatch continueAccept = new CountDownLatch(1);
         blockCreateAfterPassportLock(
                 createLockedPassport,
                 acceptWaitingForPassport,
                 continueCreate
         );
-        blockAcceptAfterRequestLock(acceptLockedRequest, continueAccept);
         clock.set(BEFORE_EXPIRY);
 
         List<RaceOutcome> outcomes;
@@ -134,10 +124,6 @@ class TransferConcurrencyBaselineIntegrationTest {
 
             Future<RaceOutcome> acceptAttempt =
                     executor.submit(this::acceptExpiredRequest);
-            assertThat(acceptLockedRequest.await(10, TimeUnit.SECONDS))
-                    .isTrue();
-
-            continueAccept.countDown();
             assertThat(acceptWaitingForPassport.await(10, TimeUnit.SECONDS))
                     .isTrue();
             clock.set(AFTER_EXPIRY);
@@ -148,16 +134,22 @@ class TransferConcurrencyBaselineIntegrationTest {
             );
         } finally {
             continueCreate.countDown();
-            continueAccept.countDown();
         }
 
         testReporter.publishEntry(Map.of(
                 "createOutcome", outcomes.get(0).name(),
                 "acceptOutcome", outcomes.get(1).name()
         ));
-        assertThat(outcomes)
-                .filteredOn(RaceOutcome.DATABASE_DEADLOCK::equals)
-                .hasSize(1);
+        assertThat(outcomes).containsExactly(
+                RaceOutcome.CREATED,
+                RaceOutcome.NOT_PENDING
+        );
+        assertThat(transferStatus(TRANSFER_REQUEST_ID)).isEqualTo("EXPIRED");
+        assertThat(pendingRequestCount()).isOne();
+        assertThat(pendingRecipientAccountId())
+                .isEqualTo(NEXT_RECIPIENT_ACCOUNT_ID);
+        assertThat(currentHolderAccountId()).isEqualTo(OWNER_ACCOUNT_ID);
+        assertThat(transferredHistoryCount()).isZero();
     }
 
     private void blockCreateAfterPassportLock(
@@ -178,19 +170,6 @@ class TransferConcurrencyBaselineIntegrationTest {
         }).when(passportRepository).findByIdForUpdate(eq(PASSPORT_ID));
     }
 
-    private void blockAcceptAfterRequestLock(
-            CountDownLatch acceptLockedRequest,
-            CountDownLatch continueAccept
-    ) {
-        doAnswer(invocation -> {
-            Object result = invocation.callRealMethod();
-            acceptLockedRequest.countDown();
-            await(continueAccept);
-            return result;
-        }).when(transferRequestRepository)
-                .findByIdForUpdate(eq(TRANSFER_REQUEST_ID));
-    }
-
     private void await(CountDownLatch latch) {
         try {
             if (!latch.await(10, TimeUnit.SECONDS)) {
@@ -203,16 +182,12 @@ class TransferConcurrencyBaselineIntegrationTest {
     }
 
     private RaceOutcome createNextRequest() {
-        try {
-            createService.create(
-                    OWNER_ACCOUNT_ID,
-                    PASSPORT_ID,
-                    NEXT_RECIPIENT_EMAIL
-            );
-            return RaceOutcome.CREATED;
-        } catch (DataAccessException exception) {
-            return deadlockOutcome(exception);
-        }
+        createService.create(
+                OWNER_ACCOUNT_ID,
+                PASSPORT_ID,
+                NEXT_RECIPIENT_EMAIL
+        );
+        return RaceOutcome.CREATED;
     }
 
     private RaceOutcome acceptExpiredRequest() {
@@ -226,28 +201,59 @@ class TransferConcurrencyBaselineIntegrationTest {
             assertThat(exception.code())
                     .isEqualTo(TransferErrorCode.TRANSFER_NOT_PENDING);
             return RaceOutcome.NOT_PENDING;
-        } catch (DataAccessException exception) {
-            return deadlockOutcome(exception);
         }
     }
 
-    private RaceOutcome deadlockOutcome(DataAccessException exception) {
-        if (hasDeadlockSqlState(exception)) {
-            return RaceOutcome.DATABASE_DEADLOCK;
-        }
-        throw exception;
+    private String transferStatus(UUID requestId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT status FROM transfer_requests WHERE id = ?",
+                String.class,
+                requestId
+        );
     }
 
-    private boolean hasDeadlockSqlState(Throwable throwable) {
-        Throwable cause = throwable;
-        while (cause != null) {
-            if (cause instanceof SQLException sqlException
-                    && DEADLOCK_SQL_STATE.equals(sqlException.getSQLState())) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return false;
+    private Integer pendingRequestCount() {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM transfer_requests
+                WHERE passport_id = ? AND status = 'PENDING'
+                """,
+                Integer.class,
+                PASSPORT_ID
+        );
+    }
+
+    private UUID pendingRecipientAccountId() {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT recipient_account_id
+                FROM transfer_requests
+                WHERE passport_id = ? AND status = 'PENDING'
+                """,
+                UUID.class,
+                PASSPORT_ID
+        );
+    }
+
+    private UUID currentHolderAccountId() {
+        return jdbcTemplate.queryForObject(
+                "SELECT current_holder_account_id FROM passports WHERE id = ?",
+                UUID.class,
+                PASSPORT_ID
+        );
+    }
+
+    private Integer transferredHistoryCount() {
+        return jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM ownership_history
+                WHERE passport_id = ? AND reason = 'TRANSFERRED'
+                """,
+                Integer.class,
+                PASSPORT_ID
+        );
     }
 
     private void deleteAll() {
@@ -401,7 +407,6 @@ class TransferConcurrencyBaselineIntegrationTest {
     private enum RaceOutcome {
         CREATED,
         ACCEPTED,
-        NOT_PENDING,
-        DATABASE_DEADLOCK
+        NOT_PENDING
     }
 }

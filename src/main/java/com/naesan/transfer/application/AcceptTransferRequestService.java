@@ -39,7 +39,12 @@ public class AcceptTransferRequestService {
 
     @Transactional
     public void accept(UUID recipientAccountId, UUID requestId) {
-        TransferRequest request = findRecipientRequest(
+        TransferRequest requestReference = findRecipientRequest(
+                recipientAccountId,
+                requestId
+        );
+        Passport passport = findPassport(requestReference.passportId());
+        TransferRequest request = findRecipientRequestForUpdate(
                 recipientAccountId,
                 requestId
         );
@@ -49,7 +54,6 @@ public class AcceptTransferRequestService {
                 recipientAccountId,
                 acceptedAt
         );
-        Passport passport = findPassport(request.passportId());
         Passport transferredPassport = transferPassport(passport, request);
         persistAcceptance(
                 passport,
@@ -60,6 +64,16 @@ public class AcceptTransferRequestService {
     }
 
     private TransferRequest findRecipientRequest(
+            UUID recipientAccountId,
+            UUID requestId
+    ) {
+        return transferRequestRepository.findById(requestId)
+                .filter(request -> request.recipientAccountId()
+                        .equals(recipientAccountId))
+                .orElseThrow(TransferException::notFound);
+    }
+
+    private TransferRequest findRecipientRequestForUpdate(
             UUID recipientAccountId,
             UUID requestId
     ) {

@@ -80,7 +80,7 @@ public class CreateTransferRequestService {
     }
 
     private void releaseExpiredRequest(UUID passportId, Instant createdAt) {
-        transferRequestRepository.findPendingByPassportId(passportId)
+        transferRequestRepository.findPendingByPassportIdForUpdate(passportId)
                 .ifPresent(request -> releaseIfExpired(request, createdAt));
     }
 
