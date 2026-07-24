@@ -15,8 +15,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import com.jayway.jsonpath.JsonPath;
 
@@ -43,6 +49,7 @@ import com.naesan.share.adapter.in.web.PublicVerificationApiController;
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class TransferRequestApiIntegrationTest {
+    private static final int CONCURRENT_ACCEPT_COUNT = 20;
     private static final UUID OWNER_ACCOUNT_ID =
             UUID.fromString("6c0550bc-d4e5-4bb0-9061-f7e1900343f1");
     private static final UUID RECIPIENT_ACCOUNT_ID =
@@ -315,6 +322,92 @@ class TransferRequestApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("동시 accept API는 한 건만 성공하고 나머지는 같은 409를 반환한다")
+    void returnsStableConflictForConcurrentAcceptLosers() throws Exception {
+        UUID requestId = createTransferRequest();
+        CountDownLatch workersReady = new CountDownLatch(CONCURRENT_ACCEPT_COUNT);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<AcceptApiOutcome>> attempts = new ArrayList<>();
+
+        try (ExecutorService executor =
+                Executors.newFixedThreadPool(CONCURRENT_ACCEPT_COUNT)) {
+            for (int count = 0; count < CONCURRENT_ACCEPT_COUNT; count++) {
+                attempts.add(executor.submit(
+                        () -> acceptAfterStart(requestId, workersReady, start)
+                ));
+            }
+
+            boolean allWorkersReady = workersReady.await(10, TimeUnit.SECONDS);
+            start.countDown();
+            assertThat(allWorkersReady).isTrue();
+
+            List<AcceptApiOutcome> outcomes = new ArrayList<>();
+            for (Future<AcceptApiOutcome> attempt : attempts) {
+                outcomes.add(attempt.get(20, TimeUnit.SECONDS));
+            }
+
+            assertThat(outcomes)
+                    .filteredOn(AcceptApiOutcome.SUCCESS::equals)
+                    .hasSize(1);
+            assertThat(outcomes)
+                    .filteredOn(AcceptApiOutcome.NOT_PENDING::equals)
+                    .hasSize(CONCURRENT_ACCEPT_COUNT - 1);
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT current_holder_account_id FROM passports WHERE id = ?",
+                UUID.class,
+                PASSPORT_ID
+        )).isEqualTo(RECIPIENT_ACCOUNT_ID);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT version FROM passports WHERE id = ?",
+                Long.class,
+                PASSPORT_ID
+        )).isOne();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM transfer_requests WHERE id = ?",
+                String.class,
+                requestId
+        )).isEqualTo("ACCEPTED");
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM ownership_history
+                WHERE passport_id = ? AND reason = 'TRANSFERRED'
+                """,
+                Integer.class,
+                PASSPORT_ID
+        )).isOne();
+    }
+
+    private AcceptApiOutcome acceptAfterStart(
+            UUID requestId,
+            CountDownLatch workersReady,
+            CountDownLatch start
+    ) throws Exception {
+        workersReady.countDown();
+        start.await();
+        MvcResult result = mockMvc.perform(post(
+                                "/api/transfers/{requestId}/acceptance",
+                                requestId
+                        )
+                        .with(authentication(recipientAuthentication()))
+                        .with(csrf()))
+                .andReturn();
+        if (result.getResponse().getStatus() == 204) {
+            return AcceptApiOutcome.SUCCESS;
+        }
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(409);
+        String code = JsonPath.read(
+                result.getResponse().getContentAsString(),
+                "$.code"
+        );
+        assertThat(code).isEqualTo("TRANSFER_NOT_PENDING");
+        return AcceptApiOutcome.NOT_PENDING;
+    }
+
+    @Test
     @DisplayName("만료된 요청은 recipient도 수락할 수 없다")
     void rejectsExpiredTransferAcceptance() throws Exception {
         UUID requestId = insertExpiredRequest();
@@ -473,5 +566,10 @@ class TransferRequestApiIntegrationTest {
                 null,
                 List.of()
         );
+    }
+
+    private enum AcceptApiOutcome {
+        SUCCESS,
+        NOT_PENDING
     }
 }
