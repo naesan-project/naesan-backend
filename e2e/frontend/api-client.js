@@ -72,6 +72,10 @@ async function createEvidence(metadata) {
   return mutation('/evidence', 'POST', metadata);
 }
 
+async function evidenceDetails(evidenceId) {
+  return request(`/evidence/${evidenceId}`);
+}
+
 async function attachEvidenceFile(evidenceId) {
   const bytes = Uint8Array.from(
       atob(EVIDENCE_FILE_BASE64),
@@ -98,6 +102,14 @@ async function passportDetails(passportId) {
   return request(`/passports/${passportId}`);
 }
 
+async function passportDetailsOutcome(passportId) {
+  return outcome(() => passportDetails(passportId));
+}
+
+async function passportListOutcome() {
+  return outcome(passportList);
+}
+
 async function ownershipHistory(passportId) {
   return request(`/passports/${passportId}/ownership-history`);
 }
@@ -117,17 +129,7 @@ async function verifyShare(rawToken) {
 }
 
 async function verifyShareOutcome(rawToken) {
-  try {
-    return await verifyShare(rawToken);
-  } catch (error) {
-    if (!(error instanceof ApiError)) {
-      throw error;
-    }
-    return {
-      body: error.body,
-      status: error.status,
-    };
-  }
+  return outcome(() => verifyShare(rawToken));
 }
 
 async function createTransfer(passportId, recipientEmail) {
@@ -150,6 +152,20 @@ async function acceptTransfer(requestId) {
   return mutation(`/transfers/${requestId}/acceptance`, 'POST');
 }
 
+async function outcome(operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error;
+    }
+    return {
+      body: error.body,
+      status: error.status,
+    };
+  }
+}
+
 class ApiError extends Error {
   constructor(status, body) {
     super(`API request failed with status ${status}`);
@@ -166,6 +182,7 @@ window.naesan = {
   createEvidence,
   createTransfer,
   csrfToken,
+  evidenceDetails,
   incomingTransfers,
   issuePassport,
   issueShare,
@@ -173,7 +190,9 @@ window.naesan = {
   outgoingTransfers,
   ownershipHistory,
   passportDetails,
+  passportDetailsOutcome,
   passportList,
+  passportListOutcome,
   register,
   verifyShare,
   verifyShareOutcome,
