@@ -64,6 +64,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/accounts").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/sessions").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/health", "/ready").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/public/passport-verification"

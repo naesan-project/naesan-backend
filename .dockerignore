@@ -1,0 +1,14 @@
+.git
+.gradle
+.idea
+.omx
+archive
+build
+docs
+e2e
+logs
+*.iml
+*.log
+.env
+.env.*
+!.env.example
