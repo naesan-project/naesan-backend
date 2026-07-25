@@ -1,7 +1,6 @@
 const API_URL = 'http://localhost:8080/api';
-const JSON_HEADERS = {
-  'Content-Type': 'application/json',
-};
+const EVIDENCE_FILE_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -57,6 +56,100 @@ async function mutation(path, method, body, headers = {}) {
   });
 }
 
+async function register(email, password) {
+  return request('/accounts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email, password}),
+  });
+}
+
+async function login(email, password) {
+  return mutation('/sessions', 'POST', {email, password});
+}
+
+async function createEvidence(metadata) {
+  return mutation('/evidence', 'POST', metadata);
+}
+
+async function attachEvidenceFile(evidenceId) {
+  const bytes = Uint8Array.from(
+      atob(EVIDENCE_FILE_BASE64),
+      (character) => character.charCodeAt(0),
+  );
+  const form = new FormData();
+  form.append('file', new Blob([bytes], {type: 'image/png'}), 'evidence.png');
+  return mutation(`/evidence/${evidenceId}/file`, 'POST', form);
+}
+
+async function confirmEvidence(evidenceId) {
+  return mutation(`/evidence/${evidenceId}/confirm`, 'POST');
+}
+
+async function issuePassport(snapshotId) {
+  return mutation('/passports', 'POST', {snapshotId});
+}
+
+async function passportList() {
+  return request('/passports');
+}
+
+async function passportDetails(passportId) {
+  return request(`/passports/${passportId}`);
+}
+
+async function ownershipHistory(passportId) {
+  return request(`/passports/${passportId}/ownership-history`);
+}
+
+async function issueShare(passportId) {
+  return mutation(
+      `/passports/${passportId}/shares`,
+      'POST',
+      {capability: 'SUMMARY'},
+  );
+}
+
+async function verifyShare(rawToken) {
+  return request('/public/passport-verification', {
+    headers: {'X-Public-Share-Token': rawToken},
+  });
+}
+
+async function verifyShareOutcome(rawToken) {
+  try {
+    return await verifyShare(rawToken);
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error;
+    }
+    return {
+      body: error.body,
+      status: error.status,
+    };
+  }
+}
+
+async function createTransfer(passportId, recipientEmail) {
+  return mutation(
+      `/passports/${passportId}/transfers`,
+      'POST',
+      {recipientEmail},
+  );
+}
+
+async function incomingTransfers() {
+  return request('/transfers/incoming');
+}
+
+async function outgoingTransfers() {
+  return request('/transfers/outgoing');
+}
+
+async function acceptTransfer(requestId) {
+  return mutation(`/transfers/${requestId}/acceptance`, 'POST');
+}
+
 class ApiError extends Error {
   constructor(status, body) {
     super(`API request failed with status ${status}`);
@@ -67,8 +160,21 @@ class ApiError extends Error {
 }
 
 window.naesan = {
+  acceptTransfer,
+  attachEvidenceFile,
+  confirmEvidence,
+  createEvidence,
+  createTransfer,
   csrfToken,
-  request,
-  mutation,
-  jsonHeaders: JSON_HEADERS,
+  incomingTransfers,
+  issuePassport,
+  issueShare,
+  login,
+  outgoingTransfers,
+  ownershipHistory,
+  passportDetails,
+  passportList,
+  register,
+  verifyShare,
+  verifyShareOutcome,
 };
