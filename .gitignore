@@ -54,3 +54,8 @@ out/
 *.log
 logs/
 .DS_Store
+
+### Browser E2E ###
+/e2e/node_modules/
+/e2e/playwright-report/
+/e2e/test-results/

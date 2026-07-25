@@ -1,0 +1,14 @@
+{
+  "name": "naesan-browser-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:browser": "playwright install chromium",
+    "test": "playwright test",
+    "test:core": "playwright test tests/core-local.spec.js",
+    "test:transfer": "playwright test tests/transfer.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0"
+  }
+}
