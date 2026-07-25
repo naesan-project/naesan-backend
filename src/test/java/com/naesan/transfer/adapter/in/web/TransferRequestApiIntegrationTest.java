@@ -297,6 +297,29 @@ class TransferRequestApiIntegrationTest {
                         .with(authentication(ownerAuthentication())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("ACCEPTED"));
+        mockMvc.perform(get(
+                                "/api/passports/{passportId}/ownership-history",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PASSPORT_NOT_FOUND"));
+        mockMvc.perform(get(
+                                "/api/passports/{passportId}/ownership-history",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(recipientAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].reason").value("ISSUED"))
+                .andExpect(jsonPath("$[0].previousHolderAccountId").doesNotExist())
+                .andExpect(jsonPath("$[0].newHolderAccountId")
+                        .value(OWNER_ACCOUNT_ID.toString()))
+                .andExpect(jsonPath("$[1].reason").value("TRANSFERRED"))
+                .andExpect(jsonPath("$[1].previousHolderAccountId")
+                        .value(OWNER_ACCOUNT_ID.toString()))
+                .andExpect(jsonPath("$[1].newHolderAccountId")
+                        .value(RECIPIENT_ACCOUNT_ID.toString()));
         mockMvc.perform(get("/api/public/passport-verification")
                         .header(
                                 PublicVerificationApiController.SHARE_TOKEN_HEADER,
@@ -537,6 +560,19 @@ class TransferRequestApiIntegrationTest {
                 """,
                 PASSPORT_ID,
                 SNAPSHOT_ID,
+                OWNER_ACCOUNT_ID,
+                CREATED_AT.atOffset(ZoneOffset.UTC)
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO ownership_history (
+                    id, passport_id, previous_holder_account_id,
+                    new_holder_account_id, reason, changed_at
+                )
+                VALUES (?, ?, NULL, ?, 'ISSUED', ?)
+                """,
+                UUID.randomUUID(),
+                PASSPORT_ID,
                 OWNER_ACCOUNT_ID,
                 CREATED_AT.atOffset(ZoneOffset.UTC)
         );

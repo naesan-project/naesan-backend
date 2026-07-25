@@ -15,6 +15,7 @@ import com.naesan.evidence.application.port.out.PurchaseEvidenceRepository;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.GetPassportDetailsService;
 import com.naesan.passport.application.ListPassportsService;
+import com.naesan.passport.application.ListOwnershipHistoryService;
 import com.naesan.passport.application.ProcessProofOutboxService;
 import com.naesan.passport.application.ReprocessProofOutboxService;
 import com.naesan.passport.application.OutboxRetryPolicy;
@@ -100,6 +101,17 @@ public class PassportApplicationConfiguration {
             PassportQueryRepository passportQueryRepository
     ) {
         return new GetPassportDetailsService(passportQueryRepository);
+    }
+
+    @Bean
+    ListOwnershipHistoryService listOwnershipHistoryService(
+            PassportRepository passportRepository,
+            OwnershipHistoryRepository ownershipHistoryRepository
+    ) {
+        return new ListOwnershipHistoryService(
+                passportRepository,
+                ownershipHistoryRepository
+        );
     }
 
     @Bean

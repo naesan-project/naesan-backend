@@ -19,6 +19,7 @@ import com.naesan.passport.application.IssuedPassport;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.GetPassportDetailsService;
 import com.naesan.passport.application.ListPassportsService;
+import com.naesan.passport.application.ListOwnershipHistoryService;
 import com.naesan.security.AuthenticatedAccount;
 
 @RestController
@@ -27,15 +28,18 @@ public class PassportApiController {
     private final IssuePassportService issuePassportService;
     private final ListPassportsService listPassportsService;
     private final GetPassportDetailsService getPassportDetailsService;
+    private final ListOwnershipHistoryService listOwnershipHistoryService;
 
     public PassportApiController(
             IssuePassportService issuePassportService,
             ListPassportsService listPassportsService,
-            GetPassportDetailsService getPassportDetailsService
+            GetPassportDetailsService getPassportDetailsService,
+            ListOwnershipHistoryService listOwnershipHistoryService
     ) {
         this.issuePassportService = issuePassportService;
         this.listPassportsService = listPassportsService;
         this.getPassportDetailsService = getPassportDetailsService;
+        this.listOwnershipHistoryService = listOwnershipHistoryService;
     }
 
     @PostMapping
@@ -70,5 +74,16 @@ public class PassportApiController {
         return PassportResponse.from(
                 getPassportDetailsService.get(account.id(), passportId)
         );
+    }
+
+    @GetMapping("/{passportId}/ownership-history")
+    public List<OwnershipHistoryResponse> ownershipHistory(
+            @AuthenticationPrincipal AuthenticatedAccount account,
+            @PathVariable UUID passportId
+    ) {
+        return listOwnershipHistoryService.list(account.id(), passportId)
+                .stream()
+                .map(OwnershipHistoryResponse::from)
+                .toList();
     }
 }
