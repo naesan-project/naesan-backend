@@ -40,6 +40,7 @@ out/
 /docs/
 /archive/
 /.omx/
+/omx_wiki/
 
 ### Local environment and secrets ###
 .env

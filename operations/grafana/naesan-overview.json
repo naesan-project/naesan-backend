@@ -1,0 +1,53 @@
+{
+  "title": "Naesan Operations",
+  "uid": "naesan-operations",
+  "schemaVersion": 41,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Proof outbox events by status",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "naesan_proof_outbox_events",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Proof processing rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(naesan_proof_outbox_processed_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Finalize rejections",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(naesan_proof_outbox_finalize_rejected_total[5m])"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "JVM heap usage",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) / sum(jvm_memory_max_bytes{area=\"heap\"})"
+        }
+      ]
+    }
+  ]
+}

@@ -65,6 +65,7 @@ services:
       NAESAN_DB_USERNAME: ${NAESAN_DB_USERNAME:-naesan}
       NAESAN_DB_PASSWORD: ${NAESAN_DB_PASSWORD:?NAESAN_DB_PASSWORD is required}
       NAESAN_FRONTEND_ORIGIN: ${NAESAN_FRONTEND_ORIGIN:-https://localhost:5173}
+      NAESAN_MANAGEMENT_PORT: 9090
       NAESAN_S3_BUCKET: naesan-private
       NAESAN_S3_REGION: ap-northeast-2
       NAESAN_S3_ENDPOINT: http://minio:9000
@@ -85,6 +86,8 @@ services:
       retries: 10
     ports:
       - "8080:8080"
+    expose:
+      - "9090"
 
 volumes:
   object-data:

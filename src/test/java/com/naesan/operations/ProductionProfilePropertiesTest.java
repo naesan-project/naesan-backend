@@ -52,6 +52,22 @@ class ProductionProfilePropertiesTest {
                 );
     }
 
+    @Test
+    @DisplayName("Production metric은 별도 management port의 Prometheus로만 노출한다")
+    void exposesPrometheusOnDedicatedManagementPort() throws IOException {
+        Properties properties = productionProperties();
+
+        assertThat(properties)
+                .containsEntry(
+                        "management.server.port",
+                        "${NAESAN_MANAGEMENT_PORT:9090}"
+                )
+                .containsEntry(
+                        "management.endpoints.web.exposure.include",
+                        "health,prometheus"
+                );
+    }
+
     private Properties productionProperties() throws IOException {
         Properties properties = new Properties();
         try (InputStream content = getClass().getResourceAsStream(

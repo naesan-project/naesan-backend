@@ -1,0 +1,23 @@
+groups:
+  - name: naesan
+    rules:
+      - alert: NaesanProofOutboxDeadLetter
+        expr: naesan_proof_outbox_events{status="dead_letter"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Proof outbox dead letter requires intervention
+      - alert: NaesanProofOutboxManualReview
+        expr: naesan_proof_outbox_events{status="manual_review"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Proof outbox event requires manual review
+      - alert: NaesanProofOutboxFinalizeRejected
+        expr: increase(naesan_proof_outbox_finalize_rejected_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: Proof outbox fencing rejected a finalize operation

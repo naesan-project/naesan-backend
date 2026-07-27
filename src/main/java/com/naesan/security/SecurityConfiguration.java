@@ -68,6 +68,10 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/health", "/ready").permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/actuator/prometheus"
+                        ).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
                                 "/api/public/passport-verification"
                         ).permitAll()
                         .requestMatchers(
