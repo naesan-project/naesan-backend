@@ -40,6 +40,18 @@ class ProductionProfilePropertiesTest {
                 );
     }
 
+    @Test
+    @DisplayName("Production console log는 MDC를 포함하는 Logstash JSON을 사용한다")
+    void usesStructuredConsoleLogging() throws IOException {
+        Properties properties = productionProperties();
+
+        assertThat(properties)
+                .containsEntry(
+                        "logging.structured.format.console",
+                        "logstash"
+                );
+    }
+
     private Properties productionProperties() throws IOException {
         Properties properties = new Properties();
         try (InputStream content = getClass().getResourceAsStream(

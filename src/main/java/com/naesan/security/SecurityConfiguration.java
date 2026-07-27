@@ -29,6 +29,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.filter.CorsFilter;
 
 import com.naesan.account.application.port.out.AccountRepository;
+import com.naesan.operations.HttpRequestCorrelationFilter;
 import com.naesan.share.adapter.in.web.PublicVerificationRateLimitFilter;
 
 @Configuration(proxyBeanMethods = false)
@@ -128,6 +129,9 @@ public class SecurityConfiguration {
                 HttpHeaders.CONTENT_TYPE,
                 "X-XSRF-TOKEN",
                 "X-Public-Share-Token"
+        ));
+        configuration.setExposedHeaders(List.of(
+                HttpRequestCorrelationFilter.REQUEST_ID_HEADER
         ));
         configuration.setAllowCredentials(true);
 
