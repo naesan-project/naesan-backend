@@ -64,7 +64,7 @@ services:
       NAESAN_DB_URL: jdbc:postgresql://postgres:5432/${NAESAN_DB_NAME:-naesan}
       NAESAN_DB_USERNAME: ${NAESAN_DB_USERNAME:-naesan}
       NAESAN_DB_PASSWORD: ${NAESAN_DB_PASSWORD:?NAESAN_DB_PASSWORD is required}
-      NAESAN_FRONTEND_ORIGIN: ${NAESAN_FRONTEND_ORIGIN:-https://localhost:5173}
+      NAESAN_FRONTEND_ORIGIN: ${NAESAN_FRONTEND_ORIGIN:-https://localhost:8080}
       NAESAN_MANAGEMENT_PORT: 9090
       NAESAN_S3_BUCKET: naesan-private
       NAESAN_S3_REGION: ap-northeast-2
@@ -84,10 +84,19 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 10
+    expose:
+      - "8080"
+      - "9090"
+
+  frontend:
+    build:
+      context: frontend
+    image: naesan-frontend:local
+    depends_on:
+      application:
+        condition: service_healthy
     ports:
       - "8080:8080"
-    expose:
-      - "9090"
 
 volumes:
   object-data:
