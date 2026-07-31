@@ -1,6 +1,10 @@
 HELP.md
 .gradle
 build/
+*.class
+hs_err_pid*
+replay_pid*
+*.pid
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -39,6 +43,7 @@ out/
 ### Local project records ###
 /docs/
 /archive/
+/DESIGN.md
 /.omx/
 /omx_wiki/
 
@@ -46,17 +51,19 @@ out/
 .env
 .env.*
 !.env.example
-/src/main/resources/application-local.properties
-/src/main/resources/application-local.yml
-/src/main/resources/application-secret.properties
-/src/main/resources/application-secret.yml
+/src/main/resources/application-local.*
+/src/main/resources/application-secret.*
 
 ### Local logs and OS files ###
 *.log
 logs/
 .DS_Store
+._*
+Thumbs.db
 
 ### Browser E2E ###
 /e2e/node_modules/
+/e2e/.cache/
+/e2e/coverage/
 /e2e/playwright-report/
 /e2e/test-results/
