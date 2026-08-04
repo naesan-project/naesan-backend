@@ -86,12 +86,18 @@ class PassportQueryApiIntegrationTest {
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(passportId.toString()))
                 .andExpect(jsonPath("$[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].product.name").value("생각등대"))
+                .andExpect(jsonPath("$[0].product.merchantName").value("생각상점"))
+                .andExpect(jsonPath("$[0].product.purchasedAt").value("2026-07-01"))
                 .andExpect(jsonPath("$[0].proof.state").value("PREPARED"));
         mockMvc.perform(get("/api/passports/{passportId}", passportId)
                         .with(authentication(ownerAuthentication())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(passportId.toString()))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.product.name").value("생각등대"))
+                .andExpect(jsonPath("$.product.merchantName").value("생각상점"))
+                .andExpect(jsonPath("$.product.purchasedAt").value("2026-07-01"))
                 .andExpect(jsonPath("$.proof.state").value("PREPARED"));
     }
 

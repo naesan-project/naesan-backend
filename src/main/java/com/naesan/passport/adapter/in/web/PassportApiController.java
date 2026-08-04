@@ -57,21 +57,21 @@ public class PassportApiController {
     }
 
     @GetMapping
-    public List<PassportResponse> list(
+    public List<PassportDetailsResponse> list(
             @AuthenticationPrincipal AuthenticatedAccount account
     ) {
         return listPassportsService.list(account.id())
                 .stream()
-                .map(PassportResponse::from)
+                .map(PassportDetailsResponse::from)
                 .toList();
     }
 
     @GetMapping("/{passportId}")
-    public PassportResponse details(
+    public PassportDetailsResponse details(
             @AuthenticationPrincipal AuthenticatedAccount account,
             @PathVariable UUID passportId
     ) {
-        return PassportResponse.from(
+        return PassportDetailsResponse.from(
                 getPassportDetailsService.get(account.id(), passportId)
         );
     }

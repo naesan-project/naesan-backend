@@ -5,7 +5,6 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 import com.naesan.passport.application.IssuedPassport;
-import com.naesan.passport.application.PassportDetails;
 import com.naesan.passport.domain.Passport;
 import com.naesan.passport.domain.ProofAnchor;
 
@@ -19,10 +18,6 @@ public record PassportResponse(
 
     public static PassportResponse from(IssuedPassport issuedPassport) {
         return of(issuedPassport.passport(), issuedPassport.proofAnchor());
-    }
-
-    public static PassportResponse from(PassportDetails details) {
-        return of(details.passport(), details.proofAnchor());
     }
 
     private static PassportResponse of(

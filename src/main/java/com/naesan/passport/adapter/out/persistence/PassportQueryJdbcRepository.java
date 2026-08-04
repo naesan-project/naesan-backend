@@ -2,6 +2,7 @@ package com.naesan.passport.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -34,9 +35,14 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 pa.state AS proof_state,
                 pa.external_reference,
                 pa.created_at AS proof_created_at,
-                pa.updated_at AS proof_updated_at
+                pa.updated_at AS proof_updated_at,
+                pe.product_name,
+                pe.merchant_name,
+                pe.purchased_at
             FROM passports p
             JOIN proof_anchors pa ON pa.passport_id = p.id
+            JOIN evidence_snapshots es ON es.id = p.snapshot_id
+            JOIN purchase_evidence pe ON pe.id = es.evidence_id
             """;
     private static final String FIND_ALL_BY_HOLDER_ACCOUNT_ID = SELECT_DETAILS + """
              WHERE p.current_holder_account_id = ?
@@ -102,6 +108,12 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 resultSet.getObject("proof_created_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("proof_updated_at", OffsetDateTime.class).toInstant()
         );
-        return new PassportDetails(passport, proofAnchor);
+        return new PassportDetails(
+                passport,
+                proofAnchor,
+                resultSet.getString("product_name"),
+                resultSet.getString("merchant_name"),
+                resultSet.getObject("purchased_at", LocalDate.class)
+        );
     }
 }
