@@ -168,6 +168,56 @@ class PublicVerificationApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("확정된 패스는 익명 검증 응답에도 공개 EVM 체인 증거를 반환한다")
+    void returnsPublicEvmAnchorEvidence() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.SUMMARY);
+        String transactionHash = "0x" + "2".repeat(64);
+        jdbcTemplate.update(
+                """
+                UPDATE proof_anchors
+                SET
+                    state = 'CONFIRMED',
+                    external_reference = ?,
+                    chain_id = 11155111,
+                    contract_address = ?,
+                    transaction_hash = ?,
+                    block_number = 9007199254740993,
+                    block_hash = ?,
+                    confirmation_count = 2,
+                    read_back_commitment = commitment,
+                    chain_anchored_at = ?,
+                    chain_checked_at = ?,
+                    updated_at = ?
+                WHERE passport_id = ?
+                """,
+                transactionHash,
+                "0x" + "1".repeat(40),
+                transactionHash,
+                "0x" + "3".repeat(64),
+                CURRENT_TIME.minusSeconds(30).atOffset(ZoneOffset.UTC),
+                CURRENT_TIME.atOffset(ZoneOffset.UTC),
+                CURRENT_TIME.atOffset(ZoneOffset.UTC),
+                PASSPORT_ID
+        );
+
+        mockMvc.perform(get("/api/public/passport-verification")
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.trustStage").value("ANCHOR_CONFIRMED"))
+                .andExpect(jsonPath("$.evm.chainId").value("11155111"))
+                .andExpect(jsonPath("$.evm.blockNumber")
+                        .value("9007199254740993"))
+                .andExpect(jsonPath("$.evm.transactionHash")
+                        .value(transactionHash))
+                .andExpect(jsonPath("$.evm.confirmations").value(2))
+                .andExpect(jsonPath("$.evm.readBackCommitment")
+                        .value(HexFormat.of().formatHex(COMMITMENT)));
+    }
+
+    @Test
     @DisplayName("unknown malformed expired revoked token은 같은 404와 no-store를 반환한다")
     void hidesTokenState() throws Exception {
         IssuedPublicShare revokedShare = issue(PublicShareCapability.SUMMARY);

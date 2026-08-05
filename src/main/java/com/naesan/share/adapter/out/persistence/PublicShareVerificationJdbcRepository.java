@@ -1,5 +1,6 @@
 package com.naesan.share.adapter.out.persistence;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -8,6 +9,7 @@ import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.naesan.passport.domain.EvmAnchorEvidence;
 import com.naesan.passport.domain.PassportStatus;
 import com.naesan.passport.domain.ProofAnchorState;
 import com.naesan.share.application.PublicShareVerificationSource;
@@ -33,6 +35,15 @@ public class PublicShareVerificationJdbcRepository
                 pa.state AS proof_state,
                 pa.commitment,
                 pa.schema_version AS commitment_schema_version,
+                pa.chain_id,
+                pa.contract_address,
+                pa.transaction_hash,
+                pa.block_number,
+                pa.block_hash,
+                pa.confirmation_count,
+                pa.read_back_commitment,
+                pa.chain_anchored_at,
+                pa.chain_checked_at,
                 es.snapshot_digest,
                 pa.anchor_salt,
                 es.schema_version AS snapshot_schema_version,
@@ -73,7 +84,26 @@ public class PublicShareVerificationJdbcRepository
                 resultSet.getString("snapshot_digest"),
                 resultSet.getBytes("anchor_salt"),
                 resultSet.getInt("snapshot_schema_version"),
-                resultSet.getBytes("canonical_payload")
+                resultSet.getBytes("canonical_payload"),
+                mapEvmEvidence(resultSet)
+        );
+    }
+
+    private EvmAnchorEvidence mapEvmEvidence(ResultSet resultSet) throws SQLException {
+        BigDecimal chainId = resultSet.getBigDecimal("chain_id");
+        if (chainId == null) {
+            return null;
+        }
+        return new EvmAnchorEvidence(
+                chainId.toBigIntegerExact(),
+                resultSet.getString("contract_address"),
+                resultSet.getString("transaction_hash"),
+                resultSet.getBigDecimal("block_number").toBigIntegerExact(),
+                resultSet.getString("block_hash"),
+                resultSet.getInt("confirmation_count"),
+                resultSet.getBytes("read_back_commitment"),
+                resultSet.getObject("chain_anchored_at", OffsetDateTime.class).toInstant(),
+                resultSet.getObject("chain_checked_at", OffsetDateTime.class).toInstant()
         );
     }
 

@@ -11,6 +11,7 @@ public record PublicPassportVerification(
         String passportStatus,
         String trustStage,
         String commitment,
+        PublicEvmAnchorVerification evm,
         PublicVerificationMaterial verificationMaterial
 ) {
 }

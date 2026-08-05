@@ -45,6 +45,7 @@ public class VerifyPublicShareService {
                 source.passportStatus().name(),
                 PublicTrustStage.from(source.proofState()).name(),
                 commitment,
+                PublicEvmAnchorVerification.from(source.evmEvidence()),
                 verificationMaterial(source, commitment)
         );
     }

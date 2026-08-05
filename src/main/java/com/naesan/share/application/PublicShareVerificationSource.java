@@ -5,6 +5,7 @@ import java.util.Objects;
 
 import com.naesan.passport.domain.PassportStatus;
 import com.naesan.passport.domain.ProofAnchorState;
+import com.naesan.passport.domain.EvmAnchorEvidence;
 import com.naesan.share.domain.PublicShare;
 
 public final class PublicShareVerificationSource {
@@ -19,6 +20,35 @@ public final class PublicShareVerificationSource {
     private final byte[] anchorSalt;
     private final int snapshotSchemaVersion;
     private final byte[] canonicalPayload;
+    private final EvmAnchorEvidence evmEvidence;
+
+    public PublicShareVerificationSource(
+            PublicShare publicShare,
+            String productName,
+            LocalDate purchasedAt,
+            PassportStatus passportStatus,
+            ProofAnchorState proofState,
+            byte[] commitment,
+            int commitmentSchemaVersion,
+            String snapshotDigest,
+            byte[] anchorSalt,
+            int snapshotSchemaVersion,
+            byte[] canonicalPayload,
+            EvmAnchorEvidence evmEvidence
+    ) {
+        this.publicShare = Objects.requireNonNull(publicShare);
+        this.productName = Objects.requireNonNull(productName);
+        this.purchasedAt = Objects.requireNonNull(purchasedAt);
+        this.passportStatus = Objects.requireNonNull(passportStatus);
+        this.proofState = Objects.requireNonNull(proofState);
+        this.commitment = Objects.requireNonNull(commitment).clone();
+        this.commitmentSchemaVersion = commitmentSchemaVersion;
+        this.snapshotDigest = Objects.requireNonNull(snapshotDigest);
+        this.anchorSalt = Objects.requireNonNull(anchorSalt).clone();
+        this.snapshotSchemaVersion = snapshotSchemaVersion;
+        this.canonicalPayload = Objects.requireNonNull(canonicalPayload).clone();
+        this.evmEvidence = evmEvidence;
+    }
 
     public PublicShareVerificationSource(
             PublicShare publicShare,
@@ -33,17 +63,20 @@ public final class PublicShareVerificationSource {
             int snapshotSchemaVersion,
             byte[] canonicalPayload
     ) {
-        this.publicShare = Objects.requireNonNull(publicShare);
-        this.productName = Objects.requireNonNull(productName);
-        this.purchasedAt = Objects.requireNonNull(purchasedAt);
-        this.passportStatus = Objects.requireNonNull(passportStatus);
-        this.proofState = Objects.requireNonNull(proofState);
-        this.commitment = Objects.requireNonNull(commitment).clone();
-        this.commitmentSchemaVersion = commitmentSchemaVersion;
-        this.snapshotDigest = Objects.requireNonNull(snapshotDigest);
-        this.anchorSalt = Objects.requireNonNull(anchorSalt).clone();
-        this.snapshotSchemaVersion = snapshotSchemaVersion;
-        this.canonicalPayload = Objects.requireNonNull(canonicalPayload).clone();
+        this(
+                publicShare,
+                productName,
+                purchasedAt,
+                passportStatus,
+                proofState,
+                commitment,
+                commitmentSchemaVersion,
+                snapshotDigest,
+                anchorSalt,
+                snapshotSchemaVersion,
+                canonicalPayload,
+                null
+        );
     }
 
     public PublicShare publicShare() {
@@ -88,5 +121,9 @@ public final class PublicShareVerificationSource {
 
     public byte[] canonicalPayload() {
         return canonicalPayload.clone();
+    }
+
+    public EvmAnchorEvidence evmEvidence() {
+        return evmEvidence;
     }
 }

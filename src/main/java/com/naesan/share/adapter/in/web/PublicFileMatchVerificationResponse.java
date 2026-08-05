@@ -3,6 +3,7 @@ package com.naesan.share.adapter.in.web;
 import java.time.LocalDate;
 
 import com.naesan.share.application.PublicPassportVerification;
+import com.naesan.share.application.PublicEvmAnchorVerification;
 import com.naesan.share.application.PublicVerificationMaterial;
 
 public record PublicFileMatchVerificationResponse(
@@ -12,6 +13,7 @@ public record PublicFileMatchVerificationResponse(
         String passportStatus,
         String trustStage,
         String commitment,
+        PublicEvmAnchorVerification evm,
         VerificationMaterialResponse verificationMaterial
 ) implements PublicVerificationResponse {
 
@@ -25,6 +27,7 @@ public record PublicFileMatchVerificationResponse(
                 verification.passportStatus(),
                 verification.trustStage(),
                 verification.commitment(),
+                verification.evm(),
                 VerificationMaterialResponse.from(verification.verificationMaterial())
         );
     }
