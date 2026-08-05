@@ -196,11 +196,15 @@ class TransferRequestApiIntegrationTest {
                 .andExpect(jsonPath("$[0].id").value(requestId.toString()))
                 .andExpect(jsonPath("$[0].requesterEmail").value(OWNER_EMAIL))
                 .andExpect(jsonPath("$[0].recipientEmail").value(RECIPIENT_EMAIL))
+                .andExpect(jsonPath("$[0].product.name").value("생각등대"))
+                .andExpect(jsonPath("$[0].product.merchantName").value("생각상점"))
                 .andExpect(jsonPath("$[0].status").value("PENDING"));
         mockMvc.perform(get("/api/transfers/incoming")
                         .with(authentication(recipientAuthentication())))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(requestId.toString()));
+                .andExpect(jsonPath("$[0].id").value(requestId.toString()))
+                .andExpect(jsonPath("$[0].product.name").value("생각등대"))
+                .andExpect(jsonPath("$[0].product.merchantName").value("생각상점"));
         mockMvc.perform(get("/api/transfers/incoming")
                         .with(authentication(otherAuthentication())))
                 .andExpect(status().isOk())

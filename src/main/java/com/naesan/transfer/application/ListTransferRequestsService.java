@@ -48,6 +48,8 @@ public class ListTransferRequestsService {
                 request.passportId(),
                 details.requesterEmail(),
                 details.recipientEmail(),
+                details.productName(),
+                details.merchantName(),
                 request.statusAt(checkedAt),
                 request.expiresAt(),
                 request.createdAt(),

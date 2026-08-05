@@ -10,6 +10,7 @@ public record TransferRequestResponse(
         UUID passportId,
         String requesterEmail,
         String recipientEmail,
+        ProductResponse product,
         String status,
         Instant expiresAt,
         Instant createdAt,
@@ -22,10 +23,20 @@ public record TransferRequestResponse(
                 request.passportId(),
                 request.requesterEmail(),
                 request.recipientEmail(),
+                new ProductResponse(
+                        request.productName(),
+                        request.merchantName()
+                ),
                 request.status().name(),
                 request.expiresAt(),
                 request.createdAt(),
                 request.updatedAt()
         );
+    }
+
+    public record ProductResponse(
+            String name,
+            String merchantName
+    ) {
     }
 }

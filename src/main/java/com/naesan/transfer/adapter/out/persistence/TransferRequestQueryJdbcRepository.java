@@ -28,12 +28,20 @@ public class TransferRequestQueryJdbcRepository implements TransferRequestQueryR
                 transfer_request.created_at,
                 transfer_request.updated_at,
                 requester.email AS requester_email,
-                recipient.email AS recipient_email
+                recipient.email AS recipient_email,
+                evidence.product_name,
+                evidence.merchant_name
             FROM transfer_requests transfer_request
             JOIN accounts requester
                 ON requester.id = transfer_request.requester_account_id
             JOIN accounts recipient
                 ON recipient.id = transfer_request.recipient_account_id
+            JOIN passports passport
+                ON passport.id = transfer_request.passport_id
+            JOIN evidence_snapshots snapshot
+                ON snapshot.id = passport.snapshot_id
+            JOIN purchase_evidence evidence
+                ON evidence.id = snapshot.evidence_id
             """;
     private static final String FIND_ALL_OUTGOING = SELECT_DETAILS + """
              WHERE transfer_request.requester_account_id = ?
@@ -78,7 +86,9 @@ public class TransferRequestQueryJdbcRepository implements TransferRequestQueryR
         return new TransferRequestDetails(
                 request,
                 resultSet.getString("requester_email"),
-                resultSet.getString("recipient_email")
+                resultSet.getString("recipient_email"),
+                resultSet.getString("product_name"),
+                resultSet.getString("merchant_name")
         );
     }
 }

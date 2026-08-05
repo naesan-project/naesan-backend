@@ -10,6 +10,8 @@ public record ListedTransferRequest(
         UUID passportId,
         String requesterEmail,
         String recipientEmail,
+        String productName,
+        String merchantName,
         TransferRequestStatus status,
         Instant expiresAt,
         Instant createdAt,
