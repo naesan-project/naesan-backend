@@ -30,6 +30,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'software.amazon.awssdk:s3'
     implementation 'software.amazon.awssdk:url-connection-client'
+    implementation 'org.web3j:core:5.0.3'
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-flyway-test'
@@ -44,6 +45,35 @@ dependencies {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'evm'
+    }
     systemProperty 'spring.test.context.cache.maxSize', '4'
+}
+
+tasks.register('contractsInstall', Exec) {
+    workingDir 'contracts'
+    commandLine 'npm', 'ci'
+    inputs.file 'contracts/package-lock.json'
+    outputs.dir 'contracts/node_modules'
+}
+
+tasks.register('contractsBuild', Exec) {
+    dependsOn 'contractsInstall'
+    workingDir 'contracts'
+    commandLine 'npm', 'run', 'build'
+    inputs.files(fileTree('contracts/contracts'))
+    inputs.file 'contracts/hardhat.config.ts'
+    outputs.dir 'contracts/artifacts'
+}
+
+tasks.register('evmTest', Test) {
+    dependsOn 'contractsBuild'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'evm'
+    }
+    systemProperty 'spring.test.context.cache.maxSize', '1'
+    shouldRunAfter tasks.named('test')
 }
