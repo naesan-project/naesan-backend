@@ -208,7 +208,7 @@ cd ..
 bash operations/verify-local-compose.sh
 ```
 
-현재 기본 Spring test suite는 374개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 프론트엔드까지 포함한 전체 Compose browser smoke를 추가로 선택할 수 있습니다.
+현재 기본 Spring test suite는 376개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 프론트엔드까지 포함한 전체 Compose browser smoke를 추가로 선택할 수 있습니다.
 
 ## 스마트 컨트랙트 배포
 

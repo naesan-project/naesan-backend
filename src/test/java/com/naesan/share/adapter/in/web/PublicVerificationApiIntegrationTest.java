@@ -379,7 +379,7 @@ class PublicVerificationApiIntegrationTest {
                                 return request;
                             })
                             .header(
-                                    TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                    TrustedProxyClientIpResolver.FORWARDED_FOR_HEADER,
                                     "198.51.100.40"
                             )
                             .header(
@@ -396,7 +396,7 @@ class PublicVerificationApiIntegrationTest {
                             return request;
                         })
                         .header(
-                                TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                TrustedProxyClientIpResolver.FORWARDED_FOR_HEADER,
                                 "198.51.100.40"
                         )
                         .header(
@@ -412,7 +412,7 @@ class PublicVerificationApiIntegrationTest {
                             return request;
                         })
                         .header(
-                                TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                TrustedProxyClientIpResolver.FORWARDED_FOR_HEADER,
                                 "198.51.100.41"
                         )
                         .header(

@@ -8,7 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.web.util.matcher.IpAddressMatcher;
 
 public final class TrustedProxyClientIpResolver {
-    static final String REAL_IP_HEADER = "X-Real-IP";
+    static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
     private static final IpAddressMatcher IPV4_ADDRESS =
             new IpAddressMatcher("0.0.0.0/0");
     private static final IpAddressMatcher IPV6_ADDRESS =
@@ -29,11 +29,23 @@ public final class TrustedProxyClientIpResolver {
         if (!isTrustedProxy(remoteAddress)) {
             return remoteAddress;
         }
-        String clientAddress = request.getHeader(REAL_IP_HEADER);
-        if (clientAddress == null || !isIpAddress(clientAddress.strip())) {
+        String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
+        if (forwardedFor == null || forwardedFor.isBlank()) {
             return remoteAddress;
         }
-        return clientAddress.strip();
+        List<String> proxyChain = Arrays.stream(forwardedFor.split(","))
+                .map(String::strip)
+                .toList();
+        for (int index = proxyChain.size() - 1; index >= 0; index--) {
+            String address = proxyChain.get(index);
+            if (!isIpAddress(address)) {
+                return remoteAddress;
+            }
+            if (!isTrustedProxy(address)) {
+                return address;
+            }
+        }
+        return remoteAddress;
     }
 
     private boolean isTrustedProxy(String remoteAddress) {
