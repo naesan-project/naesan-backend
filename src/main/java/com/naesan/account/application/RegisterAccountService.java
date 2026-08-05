@@ -1,6 +1,7 @@
 package com.naesan.account.application;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -35,7 +36,12 @@ public class RegisterAccountService {
         validateEmailAvailable(email);
 
         PasswordHash passwordHash = passwordHasher.hash(rawPassword);
-        Account account = Account.create(UUID.randomUUID(), email, passwordHash, clock.instant());
+        Account account = Account.create(
+                UUID.randomUUID(),
+                email,
+                passwordHash,
+                clock.instant().truncatedTo(ChronoUnit.MICROS)
+        );
         accountRepository.save(account);
 
         return account;

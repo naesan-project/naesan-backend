@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,7 +24,7 @@ class RegisterAccountServiceTest {
     private static final String RAW_PASSWORD = "password1234";
     private static final PasswordHash PASSWORD_HASH =
             new PasswordHash("$2b$12$" + "a".repeat(53));
-    private static final Instant CREATED_AT = Instant.parse("2026-07-15T12:00:00Z");
+    private static final Instant CREATED_AT = Instant.parse("2026-07-15T12:00:00.123456789Z");
     private static final Clock CLOCK = Clock.fixed(CREATED_AT, ZoneOffset.UTC);
 
     @Test
@@ -43,7 +44,7 @@ class RegisterAccountServiceTest {
         assertThat(account.email()).isEqualTo(new Email("user@example.com"));
         assertThat(account.passwordHash()).isEqualTo(PASSWORD_HASH);
         assertThat(account.status()).isEqualTo(AccountStatus.ACTIVE);
-        assertThat(account.createdAt()).isEqualTo(CREATED_AT);
+        assertThat(account.createdAt()).isEqualTo(CREATED_AT.truncatedTo(ChronoUnit.MICROS));
         assertThat(accountRepository.savedAccount()).isEqualTo(account);
         assertThat(passwordHasher.rawPassword()).isEqualTo(RAW_PASSWORD);
     }
