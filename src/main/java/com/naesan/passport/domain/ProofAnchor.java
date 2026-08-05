@@ -172,6 +172,26 @@ public final class ProofAnchor {
                 anchorSalt,
                 commitment,
                 ProofAnchorState.RECONCILE_PENDING,
+                null,
+                createdAt,
+                changedAt
+        );
+    }
+
+    public ProofAnchor awaitReconciliation(String externalReference, Instant changedAt) {
+        if (state != ProofAnchorState.SUBMITTED) {
+            throw new IllegalStateException("제출된 외부 증명만 대사 대기로 전환할 수 있습니다.");
+        }
+        if (externalReference == null || externalReference.isBlank()) {
+            throw new IllegalArgumentException("외부 증명 참조는 비어 있을 수 없습니다.");
+        }
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                ProofAnchorState.RECONCILE_PENDING,
                 externalReference,
                 createdAt,
                 changedAt

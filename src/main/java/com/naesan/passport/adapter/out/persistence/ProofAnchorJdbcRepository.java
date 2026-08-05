@@ -58,6 +58,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
             UPDATE proof_anchors
             SET
                 state = ?,
+                external_reference = ?,
                 updated_at = ?
             WHERE id = ? AND state = 'PREPARED'
             """;
@@ -132,6 +133,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
         int updatedRowCount = jdbcTemplate.update(
                 MARK_RECONCILE_PENDING,
                 proofAnchor.state().name(),
+                proofAnchor.externalReference(),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.id()
         );

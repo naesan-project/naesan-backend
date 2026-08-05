@@ -34,7 +34,8 @@ public class FakeProofAnchorAdapter implements ProofAnchorPort {
                 command.commitment(),
                 commitment -> new ProofAnchorReceipt(
                         EXTERNAL_REFERENCE_PREFIX + commitment,
-                        clock.instant()
+                        clock.instant(),
+                        true
                 )
         );
     }

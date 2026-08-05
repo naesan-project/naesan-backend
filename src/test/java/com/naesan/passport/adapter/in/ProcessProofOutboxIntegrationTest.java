@@ -203,6 +203,39 @@ class ProcessProofOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("제출은 되지만 즉시 최종화되지 않으면 대사 대기로 전환한다")
+    void schedulesReconciliationWhenSubmissionIsNotFinalized() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_PENDING);
+
+        boolean processed = processProofOutboxService.processNext("worker-1");
+
+        assertThat(processed).isTrue();
+        assertThat(passportStatus()).isEqualTo("ACTIVE");
+        assertThat(proofState()).isEqualTo("RECONCILE_PENDING");
+        assertThat(outboxStatus()).isEqualTo("RECONCILE_PENDING");
+        assertThat(outboxError())
+                .containsExactly("AMBIGUOUS", "SUBMISSION_NOT_FINALIZED");
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
+    @DisplayName("lookup 결과가 아직 확정 전이면 재제출하지 않고 대사를 계속한다")
+    void keepsReconciliationPendingUntilSubmissionIsFinalized() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_PENDING);
+        processProofOutboxService.processNext("worker-1");
+
+        boolean reconciled = processProofOutboxService.processNext("worker-2");
+
+        assertThat(reconciled).isTrue();
+        assertThat(proofState()).isEqualTo("RECONCILE_PENDING");
+        assertThat(outboxStatus()).isEqualTo("RECONCILE_PENDING");
+        assertThat(outboxError())
+                .containsExactly("AMBIGUOUS", "SUBMISSION_NOT_FINALIZED");
+        assertThat(proofAnchorPort.lookupCount()).isOne();
+        assertThat(proofAnchorPort.submitCount()).isOne();
+    }
+
+    @Test
     @DisplayName("lookup이 미제출을 확정하면 같은 commitment의 재제출을 예약한다")
     void schedulesSameCommitmentAfterConfirmedAbsence() {
         proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_THEN_RESPONSE_LOSS);

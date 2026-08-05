@@ -131,15 +131,28 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
                         "RESPONSE_LOST"
                 );
             }
+            case SUCCESS_THEN_PENDING -> {
+                yield storeReceipt(command.commitment(), false);
+            }
         };
     }
 
-    private ProofAnchorReceipt storeReceipt(String commitment) {
+    private ProofAnchorReceipt storeReceipt(
+            String commitment
+    ) {
+        return storeReceipt(commitment, true);
+    }
+
+    private ProofAnchorReceipt storeReceipt(
+            String commitment,
+            boolean confirmed
+    ) {
         return receiptsByCommitment.computeIfAbsent(
                 commitment,
                 value -> new ProofAnchorReceipt(
                         "controlled:" + value,
-                        clock.instant()
+                        clock.instant(),
+                        confirmed
                 )
         );
     }
@@ -171,6 +184,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         SUCCESS,
         RETRYABLE_FAILURE,
         PERMANENT_FAILURE,
-        SUCCESS_THEN_RESPONSE_LOSS
+        SUCCESS_THEN_RESPONSE_LOSS,
+        SUCCESS_THEN_PENDING
     }
 }

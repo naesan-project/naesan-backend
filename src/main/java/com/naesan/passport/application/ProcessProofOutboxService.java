@@ -26,6 +26,7 @@ import com.naesan.passport.domain.ProofAnchor;
 public class ProcessProofOutboxService {
     private static final String LOOKUP_UNSUPPORTED = "LOOKUP_UNSUPPORTED";
     private static final String ANCHOR_NOT_FOUND = "ANCHOR_NOT_FOUND";
+    private static final String SUBMISSION_NOT_FINALIZED = "SUBMISSION_NOT_FINALIZED";
 
     private final OutboxEventRepository outboxEventRepository;
     private final ProofAnchorRepository proofAnchorRepository;
@@ -111,11 +112,29 @@ public class ProcessProofOutboxService {
             return true;
         }
 
-        transactionTemplate.executeWithoutResult(status ->
-                finalizeSuccess(claim, proofAnchor, receipt)
+        OutboxEventStatus status = finalizeSubmitResult(
+                claim,
+                proofAnchor,
+                receipt
         );
-        recordProcessed(claim, OutboxEventStatus.SUCCEEDED, processingStartedAt);
+        recordProcessed(claim, status, processingStartedAt);
         return true;
+    }
+
+    private OutboxEventStatus finalizeSubmitResult(
+            OutboxClaim claim,
+            ProofAnchor proofAnchor,
+            ProofAnchorReceipt receipt
+    ) {
+        if (receipt.confirmed()) {
+            transactionTemplate.executeWithoutResult(status ->
+                    finalizeSuccess(claim, proofAnchor, receipt)
+            );
+            return OutboxEventStatus.SUCCEEDED;
+        }
+        return transactionTemplate.execute(status ->
+                finalizeAwaitingSubmissionReconcile(claim, proofAnchor, receipt)
+        );
     }
 
     private void recordProcessed(
@@ -163,7 +182,7 @@ public class ProcessProofOutboxService {
             return OutboxEventStatus.MANUAL_REVIEW;
         }
 
-        if (receipt.isPresent()) {
+        if (receipt.isPresent() && receipt.orElseThrow().confirmed()) {
             transactionTemplate.executeWithoutResult(status ->
                     finalizeReconciledSuccess(
                             claim,
@@ -172,6 +191,11 @@ public class ProcessProofOutboxService {
                     )
             );
             return OutboxEventStatus.SUCCEEDED;
+        }
+        if (receipt.isPresent()) {
+            return transactionTemplate.execute(status ->
+                    finalizePendingReconciliation(claim)
+            );
         }
         return transactionTemplate.execute(status ->
                 finalizeMissingAnchor(claim, proofAnchor)
@@ -230,6 +254,20 @@ public class ProcessProofOutboxService {
         return decision.retryAllowed()
                 ? OutboxEventStatus.RETRY_WAIT
                 : OutboxEventStatus.DEAD_LETTER;
+    }
+
+    private OutboxEventStatus finalizePendingReconciliation(OutboxClaim claim) {
+        boolean eventUpdated = outboxEventRepository.scheduleReconciliation(
+                claim,
+                new ProofProviderException(
+                        ProofFailureType.AMBIGUOUS,
+                        SUBMISSION_NOT_FINALIZED
+                )
+        );
+        if (!eventUpdated) {
+            throw finalizeRejected("외부 증명 확정 대기를 저장하지 못했습니다.");
+        }
+        return OutboxEventStatus.RECONCILE_PENDING;
     }
 
     private void finalizeManualReview(
@@ -324,6 +362,37 @@ public class ProcessProofOutboxService {
                     "외부 증명 처리 결과를 일관되게 저장하지 못했습니다."
             );
         }
+    }
+
+    private OutboxEventStatus finalizeAwaitingSubmissionReconcile(
+            OutboxClaim claim,
+            ProofAnchor proofAnchor,
+            ProofAnchorReceipt receipt
+    ) {
+        ProofAnchor reconciliableProof = proofAnchor.submit(
+                receipt.externalReference(),
+                receipt.anchoredAt()
+        ).awaitReconciliation(
+                receipt.externalReference(),
+                receipt.anchoredAt()
+        );
+
+        boolean proofUpdated = proofAnchorRepository.markReconcilePending(
+                reconciliableProof
+        );
+        boolean eventUpdated = outboxEventRepository.scheduleReconciliation(
+                claim,
+                new ProofProviderException(
+                        ProofFailureType.AMBIGUOUS,
+                        SUBMISSION_NOT_FINALIZED
+                )
+        );
+        if (!proofUpdated || !eventUpdated) {
+            throw finalizeRejected(
+                    "외부 증명 대사 상태를 일관되게 저장하지 못했습니다."
+            );
+        }
+        return OutboxEventStatus.RECONCILE_PENDING;
     }
 
     private OutboxProcessingException finalizeRejected(String message) {
