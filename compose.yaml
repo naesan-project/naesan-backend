@@ -89,12 +89,12 @@ services:
       - "9090"
 
   frontend:
-    build:
-      context: frontend
-    image: naesan-frontend:local
+    image: ${NAESAN_FRONTEND_IMAGE:-naesan-frontend:local}
     depends_on:
       application:
         condition: service_healthy
+    environment:
+      NAESAN_API_ORIGIN: http://application:8080
     ports:
       - "8080:8080"
 
