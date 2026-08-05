@@ -78,6 +78,7 @@ com.naesan
 - 비활성 계정을 차단하는 request filter
 - 최대 10MB 증빙·파일 일치 요청 제한
 - 공개 검증과 파일 일치 요청별 rate limit
+- 신뢰한 reverse proxy가 전달한 client IP별 단일 인스턴스 rate limit
 - production profile에서 fake proof provider 사용 방지
 
 ## EVM proof 파이프라인
@@ -167,6 +168,7 @@ docker compose --env-file .env -f compose.local.yaml up --build
 | `NAESAN_DB_*` | PostgreSQL 연결 |
 | `NAESAN_FRONTEND_ORIGIN` | CORS 허용 origin |
 | `NAESAN_AUTH_JWT_SECRET` | Base64로 인코딩한 256-bit 이상 JWT 서명 key |
+| `NAESAN_TRUSTED_PROXY_CIDRS` | client IP 전달을 신뢰할 reverse proxy CIDR 목록 |
 | `NAESAN_S3_*` | 비공개 증빙 저장소 |
 | `NAESAN_PROOF_PROVIDER` | `unconfigured`, `fake`, `evm` provider 선택 |
 | `NAESAN_PROOF_WORKER_ENABLED` | proof worker 실행 여부 |
@@ -219,6 +221,7 @@ Sepolia 배포 스크립트는 production compiler profile을 사용하고 대�
 - request id를 MDC에 기록
 - production console log를 Logstash JSON 형식으로 출력
 - production profile의 잘못된 origin, storage, proof 설정을 시작 시점에 차단
+- 현재 rate limit 상태는 애플리케이션 인스턴스 메모리에 있어 수평 확장 시 외부 저장소 또는 gateway가 필요
 
 ## 현재 한계
 

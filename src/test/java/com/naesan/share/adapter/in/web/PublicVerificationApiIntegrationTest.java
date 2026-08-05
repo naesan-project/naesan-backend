@@ -46,7 +46,9 @@ import com.naesan.share.application.ManagePublicShareService;
 import com.naesan.share.domain.PublicShareCapability;
 import com.naesan.passport.domain.AnchorCommitmentCalculator;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "naesan.security.trusted-proxy-cidrs=192.0.2.0/24"
+})
 @AutoConfigureMockMvc
 @Import({
         TestcontainersConfiguration.class,
@@ -360,6 +362,64 @@ class PublicVerificationApiIntegrationTest {
                 .andExpect(status().isTooManyRequests())
                 .andExpect(header().string(HttpHeaders.RETRY_AFTER, "60"))
                 .andExpect(jsonPath("$.code").value("PUBLIC_RATE_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    @DisplayName("프록시 뒤의 서로 다른 client는 file match quota를 공유하지 않는다")
+    void separatesRateLimitForClientsBehindTrustedProxy() throws Exception {
+        IssuedPublicShare share = issue(PublicShareCapability.FILE_MATCH);
+
+        for (int count = 0; count < 5; count++) {
+            mockMvc.perform(multipart(
+                                    "/api/public/passport-verification/file-match"
+                            )
+                            .file(candidateFile(ORIGINAL_FILE))
+                            .with(request -> {
+                                request.setRemoteAddr("192.0.2.10");
+                                return request;
+                            })
+                            .header(
+                                    TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                    "198.51.100.40"
+                            )
+                            .header(
+                                    PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                    share.rawToken()
+                            ))
+                    .andExpect(status().isOk());
+        }
+
+        mockMvc.perform(multipart("/api/public/passport-verification/file-match")
+                        .file(candidateFile(ORIGINAL_FILE))
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2.10");
+                            return request;
+                        })
+                        .header(
+                                TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                "198.51.100.40"
+                        )
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isTooManyRequests());
+
+        mockMvc.perform(multipart("/api/public/passport-verification/file-match")
+                        .file(candidateFile(ORIGINAL_FILE))
+                        .with(request -> {
+                            request.setRemoteAddr("192.0.2.10");
+                            return request;
+                        })
+                        .header(
+                                TrustedProxyClientIpResolver.REAL_IP_HEADER,
+                                "198.51.100.41"
+                        )
+                        .header(
+                                PublicVerificationApiController.SHARE_TOKEN_HEADER,
+                                share.rawToken()
+                        ))
+                .andExpect(status().isOk());
     }
 
     @Test

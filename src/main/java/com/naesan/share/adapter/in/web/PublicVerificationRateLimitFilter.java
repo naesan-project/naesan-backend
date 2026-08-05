@@ -28,6 +28,7 @@ public final class PublicVerificationRateLimitFilter extends OncePerRequestFilte
 
     private final FixedWindowRequestLimiter verificationLimiter;
     private final FixedWindowRequestLimiter fileMatchLimiter;
+    private final TrustedProxyClientIpResolver clientIpResolver;
     private final Duration windowDuration;
     private final Clock clock;
 
@@ -35,6 +36,7 @@ public final class PublicVerificationRateLimitFilter extends OncePerRequestFilte
             int verificationRequestLimit,
             int fileMatchRequestLimit,
             Duration windowDuration,
+            TrustedProxyClientIpResolver clientIpResolver,
             Clock clock
     ) {
         this.verificationLimiter = new FixedWindowRequestLimiter(
@@ -45,6 +47,7 @@ public final class PublicVerificationRateLimitFilter extends OncePerRequestFilte
                 fileMatchRequestLimit,
                 windowDuration
         );
+        this.clientIpResolver = Objects.requireNonNull(clientIpResolver);
         this.windowDuration = windowDuration;
         this.clock = Objects.requireNonNull(clock);
     }
@@ -78,14 +81,14 @@ public final class PublicVerificationRateLimitFilter extends OncePerRequestFilte
         if (FILE_MATCH_PATH.equals(request.getRequestURI())
                 && HttpMethod.POST.matches(request.getMethod())) {
             return fileMatchLimiter.tryAcquire(
-                    request.getRemoteAddr(),
+                    clientIpResolver.resolve(request),
                     clock.instant()
             );
         }
         if (VERIFICATION_PATH.equals(request.getRequestURI())
                 && HttpMethod.GET.matches(request.getMethod())) {
             return verificationLimiter.tryAcquire(
-                    request.getRemoteAddr(),
+                    clientIpResolver.resolve(request),
                     clock.instant()
             );
         }

@@ -12,6 +12,7 @@ import com.naesan.passport.domain.AnchorCommitmentCalculator;
 import com.naesan.passport.application.port.out.PassportRepository;
 import com.naesan.share.adapter.out.security.SecurePublicShareTokenCodec;
 import com.naesan.share.adapter.in.web.PublicVerificationRateLimitFilter;
+import com.naesan.share.adapter.in.web.TrustedProxyClientIpResolver;
 import com.naesan.share.application.ManagePublicShareService;
 import com.naesan.share.application.PublicFileMatchVerifier;
 import com.naesan.share.application.VerifyPublicShareService;
@@ -71,18 +72,28 @@ public class ShareApplicationConfiguration {
     }
 
     @Bean
+    TrustedProxyClientIpResolver trustedProxyClientIpResolver(
+            @Value("${naesan.security.trusted-proxy-cidrs:}")
+            String trustedProxyCidrs
+    ) {
+        return new TrustedProxyClientIpResolver(trustedProxyCidrs);
+    }
+
+    @Bean
     PublicVerificationRateLimitFilter publicVerificationRateLimitFilter(
             @Value("${naesan.share.rate-limit.verification-requests}")
             int verificationRequestLimit,
             @Value("${naesan.share.rate-limit.file-match-requests}")
             int fileMatchRequestLimit,
             @Value("${naesan.share.rate-limit.window}") Duration windowDuration,
+            TrustedProxyClientIpResolver clientIpResolver,
             Clock clock
     ) {
         return new PublicVerificationRateLimitFilter(
                 verificationRequestLimit,
                 fileMatchRequestLimit,
                 windowDuration,
+                clientIpResolver,
                 clock
         );
     }
