@@ -1,11 +1,17 @@
-const API_URL = 'http://localhost:8080/api';
+const API_URL = 'http://localhost:18080/api';
 const EVIDENCE_FILE_BASE64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+let accessToken = '';
 
-async function request(path, options = {}) {
+async function request(path, options = {}, authenticated = true) {
+  const headers = new Headers(options.headers);
+  if (authenticated) {
+    headers.set('Authorization', `Bearer ${accessToken}`);
+  }
   const response = await fetch(`${API_URL}${path}`, {
     credentials: 'include',
     ...options,
+    headers,
   });
   const body = await responseBody(response);
   if (!response.ok) {
@@ -30,7 +36,7 @@ async function responseBody(response) {
 }
 
 async function csrfToken() {
-  await request('/csrf');
+  await request('/csrf', {}, false);
   const csrfCookie = document.cookie
       .split('; ')
       .find((cookie) => cookie.startsWith('XSRF-TOKEN='));
@@ -40,7 +46,13 @@ async function csrfToken() {
   return decodeURIComponent(csrfCookie.split('=').slice(1).join('='));
 }
 
-async function mutation(path, method, body, headers = {}) {
+async function mutation(
+    path,
+    method,
+    body,
+    headers = {},
+    authenticated = true,
+) {
   const token = await csrfToken();
   const requestHeaders = {
     'X-XSRF-TOKEN': token,
@@ -53,7 +65,7 @@ async function mutation(path, method, body, headers = {}) {
     method,
     headers: requestHeaders,
     body: body instanceof FormData ? body : JSON.stringify(body),
-  });
+  }, authenticated);
 }
 
 async function register(email, password) {
@@ -61,11 +73,19 @@ async function register(email, password) {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({email, password}),
-  });
+  }, false);
 }
 
 async function login(email, password) {
-  return mutation('/sessions', 'POST', {email, password});
+  const tokenSession = await mutation(
+      '/sessions',
+      'POST',
+      {email, password},
+      {},
+      false,
+  );
+  accessToken = tokenSession.body.accessToken;
+  return tokenSession;
 }
 
 async function createEvidence(metadata) {
@@ -125,7 +145,7 @@ async function issueShare(passportId) {
 async function verifyShare(rawToken) {
   return request('/public/passport-verification', {
     headers: {'X-Public-Share-Token': rawToken},
-  });
+  }, false);
 }
 
 async function verifyShareOutcome(rawToken) {

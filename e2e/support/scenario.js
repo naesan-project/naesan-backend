@@ -8,10 +8,10 @@ export async function openClient(page) {
 export async function registerAndLogin(page, email) {
   return page.evaluate(async ({accountEmail, password}) => {
     const registered = await window.naesan.register(accountEmail, password);
-    const session = await window.naesan.login(accountEmail, password);
+    const tokenSession = await window.naesan.login(accountEmail, password);
     return {
       account: registered.body,
-      session: session.body,
+      tokenSession: tokenSession.body,
     };
   }, {
     accountEmail: email,

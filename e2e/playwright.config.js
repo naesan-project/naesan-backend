@@ -1,6 +1,6 @@
 import {defineConfig, devices} from '@playwright/test';
 
-const BACKEND_URL = 'http://localhost:8080';
+const BACKEND_URL = 'http://localhost:18080';
 const FRONTEND_URL = 'http://localhost:5173';
 
 export default defineConfig({
@@ -29,7 +29,7 @@ export default defineConfig({
     {
       command: [
         '../gradlew -p .. bootTestRun',
-        `--args="--server.port=8080`,
+        `--args="--server.port=18080`,
         `--naesan.security.frontend-origin=${FRONTEND_URL}`,
         '--naesan.proof.worker.initial-delay=0s"',
       ].join(' '),

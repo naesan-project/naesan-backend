@@ -9,7 +9,7 @@
 
 ## 책임 범위
 
-- 세션 기반 계정 인증과 CSRF 보호
+- JWT access token과 회전 가능한 refresh token 기반 계정 인증
 - 증빙 메타데이터·파일의 등록, 확정, 조회와 삭제 수명주기
 - 확정된 증빙 스냅샷을 기반으로 한 패스 발급과 조회
 - 범위와 만료 시간을 가진 공개 공유 capability 관리
@@ -39,7 +39,7 @@ com.naesan
 ├── passport/     # 패스 발급, 조회, 소유 이력, proof outbox
 ├── share/        # 공개 공유, scope, 파일 일치 확인
 ├── transfer/     # 이전 요청과 보유자 변경
-├── security/     # 세션, CSRF, CORS, 활성 계정 필터
+├── security/     # JWT, refresh token, CSRF, CORS, 활성 계정 필터
 └── operations/   # health, request id, 운영 환경 가드
 ```
 
@@ -68,10 +68,12 @@ com.naesan
 
 ## 인증과 보안
 
-- Spring Security 세션 인증
-- `HttpOnly`, `SameSite=Lax` 세션 쿠키
-- 운영 profile에서 Secure 쿠키 강제
-- `/api/csrf`로 `XSRF-TOKEN`을 발급하고 mutation 요청의 `X-XSRF-TOKEN` 헤더 검증
+- 15분 만료 JWT access token을 `Authorization: Bearer` 헤더로 검증
+- 30일 refresh token은 `HttpOnly`, `SameSite=Lax` 쿠키로 전달하고 DB에 SHA-256 hash만 저장
+- refresh token은 갱신 시 행 잠금 후 1회 사용처리하고 새 token으로 회전
+- 로그아웃은 현재 refresh token을, 계정 삭제는 해당 계정의 모든 refresh token을 즉시 폐기
+- `/api/csrf`로 `XSRF-TOKEN`을 발급하고 로그인·갱신·로그아웃 요청의 `X-XSRF-TOKEN` 헤더 검증
+- 운영 profile에서 refresh token의 Secure 쿠키와 256-bit 이상 JWT secret 강제
 - credentials를 허용하는 단일 frontend origin CORS 정책
 - 비활성 계정을 차단하는 request filter
 - 최대 10MB 증빙·파일 일치 요청 제한
@@ -164,6 +166,7 @@ Compose는 PostgreSQL, MinIO, Spring Boot API와 프론트엔드 Nginx를 실행
 | --- | --- |
 | `NAESAN_DB_*` | PostgreSQL 연결 |
 | `NAESAN_FRONTEND_ORIGIN` | CORS 허용 origin |
+| `NAESAN_AUTH_JWT_SECRET` | Base64로 인코딩한 256-bit 이상 JWT 서명 key |
 | `NAESAN_S3_*` | 비공개 증빙 저장소 |
 | `NAESAN_PROOF_PROVIDER` | `unconfigured`, `fake`, `evm` provider 선택 |
 | `NAESAN_PROOF_WORKER_ENABLED` | proof worker 실행 여부 |
@@ -200,7 +203,7 @@ npm run install:browser
 npm test
 ```
 
-현재 기본 Spring test suite는 363개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트와 production Docker 이미지 빌드를 실행합니다.
+현재 기본 Spring test suite는 367개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트와 production Docker 이미지 빌드를 실행합니다.
 
 ## 스마트 컨트랙트 배포
 
