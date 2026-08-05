@@ -18,6 +18,13 @@ console.log(`Deploying ProofCommitmentAnchor to ${networkName}...`);
 console.log(`Deployer: ${deployer.account.address}`);
 console.log(`Writer: ${writer}`);
 
-const anchor = await viem.deployContract("ProofCommitmentAnchor", [writer]);
+const publicClient = await viem.getPublicClient();
+const { contract: anchor, deploymentTransaction } =
+  await viem.sendDeploymentTransaction("ProofCommitmentAnchor", [writer]);
+const receipt = await publicClient.waitForTransactionReceipt({
+  hash: deploymentTransaction.hash,
+});
 
 console.log(`ProofCommitmentAnchor address: ${anchor.address}`);
+console.log(`Deployment transaction: ${deploymentTransaction.hash}`);
+console.log(`Deployment block: ${receipt.blockNumber}`);

@@ -51,6 +51,7 @@ npm run deploy:testnet
 ```
 
 The script uses the production compiler profile and refuses to run against a
-network other than Sepolia. Record the resulting contract address in the
-backend deployment configuration. Never reuse the deployer key as a personal
-wallet key or commit private keys and RPC credentials.
+network other than Sepolia. It prints the contract address, deployment
+transaction, and deployment block required by the backend configuration. Never
+reuse the deployer key as a personal wallet key or commit private keys and RPC
+credentials.
