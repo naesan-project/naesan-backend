@@ -151,14 +151,14 @@ docker build -t naesan-frontend:local .
 
 cd ../naesan-backend
 cp .env.example .env
-docker compose up --build
+docker compose --env-file .env -f compose.local.yaml up --build
 ```
 
 - 애플리케이션: `http://localhost:8080`
 - 프론트엔드 health: `http://localhost:8080/health`
 - 백엔드 readiness: `http://localhost:8080/ready`
 
-Compose는 PostgreSQL, MinIO, Spring Boot API와 프론트엔드 Nginx를 실행합니다. `.env.example`은 로컬 예시이며 실제 비밀번호, RPC URL, 개인 키와 클라우드 자격 증명을 커밋하면 안 됩니다.
+`compose.local.yaml`은 HTTP origin과 비보안 refresh cookie를 사용하는 로컬 전용 구성으로 PostgreSQL, MinIO, Spring Boot API와 프론트엔드 Nginx를 실행합니다. 운영 환경은 `production` profile과 HTTPS origin, Secure refresh cookie를 사용하며 이후 배포 플랫폼 설정에서 별도로 구성합니다. `.env.example`은 로컬 예시이며 실제 비밀번호, RPC URL, 개인 키와 클라우드 자격 증명을 커밋하면 안 됩니다.
 
 ## 주요 환경변수
 
