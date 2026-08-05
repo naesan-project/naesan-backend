@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      compose_smoke:
+        description: Run the full local Compose browser smoke test
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -49,5 +56,43 @@ jobs:
       - name: Run local-chain integration tests
         run: ./gradlew evmTest --no-daemon
 
+      - name: Validate local Compose configuration
+        env:
+          NAESAN_FRONTEND_CONTEXT: .
+        run: docker compose --env-file .env.example --file compose.local.yaml config --quiet
+
       - name: Build production image
         run: docker build --tag naesan-backend:ci .
+
+  compose-smoke:
+    if: github.event_name == 'workflow_dispatch' && inputs.compose_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v6
+
+      - name: Checkout frontend
+        uses: actions/checkout@v6
+        with:
+          repository: naesan-project/naesan-frontend
+          path: naesan-frontend
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+          node-version: '24'
+
+      - name: Install browser smoke dependencies
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Run full local Compose smoke test
+        env:
+          NAESAN_FRONTEND_CONTEXT: ./naesan-frontend
+        run: bash operations/verify-local-compose.sh
