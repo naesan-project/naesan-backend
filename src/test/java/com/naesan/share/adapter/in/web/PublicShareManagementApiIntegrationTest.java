@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -83,9 +84,27 @@ class PublicShareManagementApiIntegrationTest {
     @Test
     @DisplayName("현재 보유자는 JSON API로 share를 발급하고 회전한 뒤 폐기한다")
     void managesShareLifecycle() throws Exception {
+        mockMvc.perform(get(
+                                "/api/passports/{passportId}/shares/current",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isNoContent());
+
         MvcResult issuance = issueShare("SUMMARY");
         String firstRawToken = jsonValue(issuance, "$.rawToken");
         UUID firstShareId = UUID.fromString(jsonValue(issuance, "$.id"));
+
+        mockMvc.perform(get(
+                                "/api/passports/{passportId}/shares/current",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(firstShareId.toString()))
+                .andExpect(jsonPath("$.capability").value("SUMMARY"))
+                .andExpect(jsonPath("$.rawToken").doesNotExist())
+                .andExpect(jsonPath("$.tokenHash").doesNotExist());
 
         MvcResult rotation = rotateShare("FILE_MATCH");
         String rotatedRawToken = jsonValue(rotation, "$.rawToken");
@@ -102,6 +121,13 @@ class PublicShareManagementApiIntegrationTest {
                         .with(csrf()))
                 .andExpect(status().isNoContent());
         assertThat(revokedAt(rotatedShareId)).isNotNull();
+
+        mockMvc.perform(get(
+                                "/api/passports/{passportId}/shares/current",
+                                PASSPORT_ID
+                        )
+                        .with(authentication(ownerAuthentication())))
+                .andExpect(status().isNoContent());
     }
 
     @Test

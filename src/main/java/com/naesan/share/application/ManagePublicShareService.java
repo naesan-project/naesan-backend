@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -51,14 +52,14 @@ public class ManagePublicShareService {
             UUID passportId,
             PublicShareCapability capability
     ) {
-        requireOwnedActivePassport(holderAccountId, passportId);
+        requireOwnedActivePassportForUpdate(holderAccountId, passportId);
         Instant issuedAt = currentTime();
         publicShareRepository.findUnrevokedByPassportId(passportId)
                 .ifPresent(publicShare -> handleExistingShare(publicShare, issuedAt));
         return createShare(passportId, capability, issuedAt);
     }
 
-    private Passport requireOwnedActivePassport(
+    private Passport requireOwnedActivePassportForUpdate(
             UUID holderAccountId,
             UUID passportId
     ) {
@@ -96,13 +97,33 @@ public class ManagePublicShareService {
         return new IssuedPublicShare(publicShare, generatedToken.rawToken());
     }
 
+    @Transactional(readOnly = true)
+    public Optional<PublicShare> current(
+            UUID holderAccountId,
+            UUID passportId
+    ) {
+        requireOwnedActivePassportForRead(holderAccountId, passportId);
+        Instant checkedAt = currentTime();
+        return publicShareRepository.findUnrevokedByPassportId(passportId)
+                .filter(publicShare -> publicShare.isAvailableAt(checkedAt));
+    }
+
+    private Passport requireOwnedActivePassportForRead(
+            UUID holderAccountId,
+            UUID passportId
+    ) {
+        return passportRepository.findById(passportId)
+                .filter(passport -> passport.isActiveHolder(holderAccountId))
+                .orElseThrow(PublicShareException::notFound);
+    }
+
     @Transactional
     public IssuedPublicShare rotate(
             UUID holderAccountId,
             UUID passportId,
             PublicShareCapability capability
     ) {
-        requireOwnedActivePassport(holderAccountId, passportId);
+        requireOwnedActivePassportForUpdate(holderAccountId, passportId);
         Instant rotatedAt = currentTime();
         PublicShare currentShare = publicShareRepository
                 .findUnrevokedByPassportId(passportId)
@@ -117,7 +138,7 @@ public class ManagePublicShareService {
             UUID passportId,
             UUID shareId
     ) {
-        requireOwnedActivePassport(holderAccountId, passportId);
+        requireOwnedActivePassportForUpdate(holderAccountId, passportId);
         PublicShare publicShare = publicShareRepository
                 .findByIdAndPassportId(shareId, passportId)
                 .orElseThrow(PublicShareException::notFound);
