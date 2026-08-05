@@ -31,7 +31,7 @@ public record EvmProofResponse(
                 evidence.blockHash(),
                 evidence.confirmations(),
                 HexFormat.of().formatHex(evidence.readBackCommitment()),
-                proofAnchor.updatedAt(),
+                evidence.anchoredAt(),
                 evidence.checkedAt()
         );
     }

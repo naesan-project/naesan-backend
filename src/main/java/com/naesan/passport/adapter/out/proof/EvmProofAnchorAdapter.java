@@ -258,6 +258,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 block.getHash(),
                 confirmations,
                 commitment,
+                anchoredAt,
                 clock.instant()
         );
         return new ProofAnchorReceipt(

@@ -157,6 +157,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
                 "0x" + "3".repeat(64),
                 2,
                 HexFormat.of().parseHex(commitment),
+                clock.instant(),
                 clock.instant()
         );
         var receipt = new ProofAnchorReceipt(

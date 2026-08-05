@@ -11,6 +11,7 @@ public record EvmAnchorEvidence(
         String blockHash,
         int confirmations,
         byte[] readBackCommitment,
+        Instant anchoredAt,
         Instant checkedAt
 ) {
     private static final int COMMITMENT_BYTES = 32;
@@ -22,6 +23,7 @@ public record EvmAnchorEvidence(
                 || blockNumber == null
                 || blockHash == null
                 || readBackCommitment == null
+                || anchoredAt == null
                 || checkedAt == null) {
             throw new IllegalArgumentException("EVM 기준점 증거의 필수 값은 null일 수 없습니다.");
         }

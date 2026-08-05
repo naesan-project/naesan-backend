@@ -6,6 +6,7 @@ ALTER TABLE proof_anchors
     ADD COLUMN block_hash VARCHAR(66),
     ADD COLUMN confirmation_count INTEGER,
     ADD COLUMN read_back_commitment BYTEA,
+    ADD COLUMN chain_anchored_at TIMESTAMPTZ,
     ADD COLUMN chain_checked_at TIMESTAMPTZ,
     ADD CONSTRAINT proof_anchors_transaction_hash_unique UNIQUE (transaction_hash),
     ADD CONSTRAINT proof_anchors_evm_evidence_complete CHECK (
@@ -17,6 +18,7 @@ ALTER TABLE proof_anchors
             AND block_hash IS NULL
             AND confirmation_count IS NULL
             AND read_back_commitment IS NULL
+            AND chain_anchored_at IS NULL
             AND chain_checked_at IS NULL
         )
         OR
@@ -28,6 +30,7 @@ ALTER TABLE proof_anchors
             AND block_hash IS NOT NULL
             AND confirmation_count IS NOT NULL
             AND read_back_commitment IS NOT NULL
+            AND chain_anchored_at IS NOT NULL
             AND chain_checked_at IS NOT NULL
         )
     ),

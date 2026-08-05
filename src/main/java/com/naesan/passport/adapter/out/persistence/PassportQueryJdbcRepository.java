@@ -43,6 +43,7 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 pa.block_hash,
                 pa.confirmation_count,
                 pa.read_back_commitment,
+                pa.chain_anchored_at,
                 pa.chain_checked_at,
                 pa.created_at AS proof_created_at,
                 pa.updated_at AS proof_updated_at,
@@ -141,6 +142,7 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 resultSet.getString("block_hash"),
                 resultSet.getInt("confirmation_count"),
                 resultSet.getBytes("read_back_commitment"),
+                resultSet.getObject("chain_anchored_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("chain_checked_at", OffsetDateTime.class).toInstant()
         );
     }

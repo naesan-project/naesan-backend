@@ -29,6 +29,7 @@ class EvmProofResponseTest {
                 "0x" + "3".repeat(64),
                 3,
                 commitment,
+                anchoredAt,
                 anchoredAt.plusSeconds(30)
         );
         ProofAnchor proofAnchor = ProofAnchor.restore(

@@ -35,6 +35,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 block_hash,
                 confirmation_count,
                 read_back_commitment,
+                chain_anchored_at,
                 chain_checked_at,
                 created_at,
                 updated_at
@@ -56,11 +57,12 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 block_hash,
                 confirmation_count,
                 read_back_commitment,
+                chain_anchored_at,
                 chain_checked_at,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_PASSPORT_ID =
@@ -77,6 +79,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 block_hash = ?,
                 confirmation_count = ?,
                 read_back_commitment = ?,
+                chain_anchored_at = ?,
                 chain_checked_at = ?,
                 updated_at = ?
             WHERE id = ? AND state = 'PREPARED'
@@ -101,6 +104,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 block_hash = ?,
                 confirmation_count = ?,
                 read_back_commitment = ?,
+                chain_anchored_at = ?,
                 chain_checked_at = ?,
                 updated_at = ?
             WHERE id = ? AND state = 'RECONCILE_PENDING'
@@ -137,6 +141,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 blockHash(proofAnchor),
                 confirmationCount(proofAnchor),
                 readBackCommitment(proofAnchor),
+                chainAnchoredAt(proofAnchor),
                 chainCheckedAt(proofAnchor),
                 proofAnchor.createdAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC)
@@ -172,6 +177,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 blockHash(confirmedProofAnchor),
                 confirmationCount(confirmedProofAnchor),
                 readBackCommitment(confirmedProofAnchor),
+                chainAnchoredAt(confirmedProofAnchor),
                 chainCheckedAt(confirmedProofAnchor),
                 confirmedProofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 confirmedProofAnchor.id()
@@ -218,6 +224,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 blockHash(proofAnchor),
                 confirmationCount(proofAnchor),
                 readBackCommitment(proofAnchor),
+                chainAnchoredAt(proofAnchor),
                 chainCheckedAt(proofAnchor),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.id()
@@ -264,6 +271,7 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 resultSet.getString("block_hash"),
                 resultSet.getInt("confirmation_count"),
                 resultSet.getBytes("read_back_commitment"),
+                resultSet.getObject("chain_anchored_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("chain_checked_at", OffsetDateTime.class).toInstant()
         );
     }
@@ -302,6 +310,12 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
         return evidence(proofAnchor) == null
                 ? null
                 : evidence(proofAnchor).checkedAt().atOffset(ZoneOffset.UTC);
+    }
+
+    private OffsetDateTime chainAnchoredAt(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null
+                ? null
+                : evidence(proofAnchor).anchoredAt().atOffset(ZoneOffset.UTC);
     }
 
     private EvmAnchorEvidence evidence(ProofAnchor proofAnchor) {

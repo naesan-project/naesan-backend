@@ -2,6 +2,7 @@ package com.naesan.passport.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Optional;
@@ -207,12 +208,13 @@ public class ProcessProofOutboxService {
             ProofAnchor proofAnchor,
             ProofAnchorReceipt receipt
     ) {
+        Instant confirmedAt = clock.instant();
         ProofAnchor confirmedProof = proofAnchor.confirmReconciled(
                 receipt.externalReference(),
-                receipt.anchoredAt(),
+                confirmedAt,
                 receipt.evidence()
         );
-        OutboxEvent succeededEvent = claim.event().succeed(receipt.anchoredAt());
+        OutboxEvent succeededEvent = claim.event().succeed(confirmedAt);
         boolean proofConfirmed = proofAnchorRepository.confirmReconciled(
                 confirmedProof
         );
@@ -348,10 +350,11 @@ public class ProcessProofOutboxService {
             ProofAnchor proofAnchor,
             ProofAnchorReceipt receipt
     ) {
+        Instant confirmedAt = clock.instant();
         ProofAnchor confirmedProof = proofAnchor
-                .submit(receipt.externalReference(), receipt.anchoredAt())
-                .confirm(receipt.anchoredAt(), receipt.evidence());
-        OutboxEvent succeededEvent = claim.event().succeed(receipt.anchoredAt());
+                .submit(receipt.externalReference(), confirmedAt)
+                .confirm(confirmedAt, receipt.evidence());
+        OutboxEvent succeededEvent = claim.event().succeed(confirmedAt);
 
         boolean proofConfirmed = proofAnchorRepository.confirmPrepared(confirmedProof);
         boolean eventCompleted = outboxEventRepository.completeClaimed(
@@ -370,12 +373,13 @@ public class ProcessProofOutboxService {
             ProofAnchor proofAnchor,
             ProofAnchorReceipt receipt
     ) {
+        Instant changedAt = clock.instant();
         ProofAnchor reconciliableProof = proofAnchor.submit(
                 receipt.externalReference(),
-                receipt.anchoredAt()
+                changedAt
         ).awaitReconciliation(
                 receipt.externalReference(),
-                receipt.anchoredAt()
+                changedAt
         );
 
         boolean proofUpdated = proofAnchorRepository.markReconcilePending(
