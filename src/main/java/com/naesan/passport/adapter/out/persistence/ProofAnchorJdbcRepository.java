@@ -1,5 +1,7 @@
 package com.naesan.passport.adapter.out.persistence;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -11,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.naesan.passport.application.port.out.ProofAnchorRepository;
+import com.naesan.passport.domain.EvmAnchorEvidence;
 import com.naesan.passport.domain.ProofAnchor;
 import com.naesan.passport.domain.ProofAnchorState;
 
@@ -25,6 +28,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 commitment,
                 state,
                 external_reference,
+                chain_id,
+                contract_address,
+                transaction_hash,
+                block_number,
+                block_hash,
+                confirmation_count,
+                read_back_commitment,
+                chain_checked_at,
                 created_at,
                 updated_at
             FROM proof_anchors
@@ -38,10 +49,18 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 commitment,
                 state,
                 external_reference,
+                chain_id,
+                contract_address,
+                transaction_hash,
+                block_number,
+                block_hash,
+                confirmation_count,
+                read_back_commitment,
+                chain_checked_at,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """;
     private static final String FIND_BY_ID = SELECT_COLUMNS + " WHERE id = ?";
     private static final String FIND_BY_PASSPORT_ID =
@@ -51,6 +70,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
             SET
                 state = ?,
                 external_reference = ?,
+                chain_id = ?,
+                contract_address = ?,
+                transaction_hash = ?,
+                block_number = ?,
+                block_hash = ?,
+                confirmation_count = ?,
+                read_back_commitment = ?,
+                chain_checked_at = ?,
                 updated_at = ?
             WHERE id = ? AND state = 'PREPARED'
             """;
@@ -67,6 +94,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
             SET
                 state = ?,
                 external_reference = ?,
+                chain_id = ?,
+                contract_address = ?,
+                transaction_hash = ?,
+                block_number = ?,
+                block_hash = ?,
+                confirmation_count = ?,
+                read_back_commitment = ?,
+                chain_checked_at = ?,
                 updated_at = ?
             WHERE id = ? AND state = 'RECONCILE_PENDING'
             """;
@@ -95,6 +130,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 proofAnchor.commitment(),
                 proofAnchor.state().name(),
                 proofAnchor.externalReference(),
+                chainId(proofAnchor),
+                contractAddress(proofAnchor),
+                transactionHash(proofAnchor),
+                blockNumber(proofAnchor),
+                blockHash(proofAnchor),
+                confirmationCount(proofAnchor),
+                readBackCommitment(proofAnchor),
+                chainCheckedAt(proofAnchor),
                 proofAnchor.createdAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC)
         );
@@ -122,6 +165,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 CONFIRM_PREPARED,
                 confirmedProofAnchor.state().name(),
                 confirmedProofAnchor.externalReference(),
+                chainId(confirmedProofAnchor),
+                contractAddress(confirmedProofAnchor),
+                transactionHash(confirmedProofAnchor),
+                blockNumber(confirmedProofAnchor),
+                blockHash(confirmedProofAnchor),
+                confirmationCount(confirmedProofAnchor),
+                readBackCommitment(confirmedProofAnchor),
+                chainCheckedAt(confirmedProofAnchor),
                 confirmedProofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 confirmedProofAnchor.id()
         );
@@ -160,6 +211,14 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 UPDATE_RECONCILE_PENDING,
                 proofAnchor.state().name(),
                 proofAnchor.externalReference(),
+                chainId(proofAnchor),
+                contractAddress(proofAnchor),
+                transactionHash(proofAnchor),
+                blockNumber(proofAnchor),
+                blockHash(proofAnchor),
+                confirmationCount(proofAnchor),
+                readBackCommitment(proofAnchor),
+                chainCheckedAt(proofAnchor),
                 proofAnchor.updatedAt().atOffset(ZoneOffset.UTC),
                 proofAnchor.id()
         );
@@ -186,8 +245,66 @@ public class ProofAnchorJdbcRepository implements ProofAnchorRepository {
                 resultSet.getBytes("commitment"),
                 ProofAnchorState.valueOf(resultSet.getString("state")),
                 resultSet.getString("external_reference"),
+                mapEvmEvidence(resultSet),
                 resultSet.getObject("created_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("updated_at", OffsetDateTime.class).toInstant()
         );
+    }
+
+    private EvmAnchorEvidence mapEvmEvidence(ResultSet resultSet) throws SQLException {
+        BigDecimal chainId = resultSet.getBigDecimal("chain_id");
+        if (chainId == null) {
+            return null;
+        }
+        return new EvmAnchorEvidence(
+                chainId.toBigIntegerExact(),
+                resultSet.getString("contract_address"),
+                resultSet.getString("transaction_hash"),
+                resultSet.getBigDecimal("block_number").toBigIntegerExact(),
+                resultSet.getString("block_hash"),
+                resultSet.getInt("confirmation_count"),
+                resultSet.getBytes("read_back_commitment"),
+                resultSet.getObject("chain_checked_at", OffsetDateTime.class).toInstant()
+        );
+    }
+
+    private BigInteger chainId(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).chainId();
+    }
+
+    private String contractAddress(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).contractAddress();
+    }
+
+    private String transactionHash(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).transactionHash();
+    }
+
+    private BigInteger blockNumber(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).blockNumber();
+    }
+
+    private String blockHash(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).blockHash();
+    }
+
+    private Integer confirmationCount(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null ? null : evidence(proofAnchor).confirmations();
+    }
+
+    private byte[] readBackCommitment(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null
+                ? null
+                : evidence(proofAnchor).readBackCommitment();
+    }
+
+    private OffsetDateTime chainCheckedAt(ProofAnchor proofAnchor) {
+        return evidence(proofAnchor) == null
+                ? null
+                : evidence(proofAnchor).checkedAt().atOffset(ZoneOffset.UTC);
+    }
+
+    private EvmAnchorEvidence evidence(ProofAnchor proofAnchor) {
+        return proofAnchor.evmEvidence();
     }
 }

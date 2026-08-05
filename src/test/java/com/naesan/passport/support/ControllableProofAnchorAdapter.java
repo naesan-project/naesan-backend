@@ -1,6 +1,8 @@
 package com.naesan.passport.support;
 
+import java.math.BigInteger;
 import java.time.Clock;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +19,7 @@ import com.naesan.passport.application.port.out.ProofAnchorReceipt;
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderCapabilities;
 import com.naesan.passport.application.port.out.ProofProviderException;
+import com.naesan.passport.domain.EvmAnchorEvidence;
 
 public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
     private final Clock clock;
@@ -134,6 +137,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
             case SUCCESS_THEN_PENDING -> {
                 yield storeReceipt(command.commitment(), false);
             }
+            case SUCCESS_WITH_EVM_EVIDENCE -> storeEvmReceipt(command.commitment());
         };
     }
 
@@ -141,6 +145,28 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
             String commitment
     ) {
         return storeReceipt(commitment, true);
+    }
+
+    private ProofAnchorReceipt storeEvmReceipt(String commitment) {
+        String transactionHash = "0x" + "1".repeat(64);
+        var evidence = new EvmAnchorEvidence(
+                BigInteger.valueOf(11_155_111L),
+                "0x" + "2".repeat(40),
+                transactionHash,
+                BigInteger.valueOf(123L),
+                "0x" + "3".repeat(64),
+                2,
+                HexFormat.of().parseHex(commitment),
+                clock.instant()
+        );
+        var receipt = new ProofAnchorReceipt(
+                transactionHash,
+                clock.instant(),
+                true,
+                evidence
+        );
+        receiptsByCommitment.put(commitment, receipt);
+        return receipt;
     }
 
     private ProofAnchorReceipt storeReceipt(
@@ -185,6 +211,7 @@ public final class ControllableProofAnchorAdapter implements ProofAnchorPort {
         RETRYABLE_FAILURE,
         PERMANENT_FAILURE,
         SUCCESS_THEN_RESPONSE_LOSS,
-        SUCCESS_THEN_PENDING
+        SUCCESS_THEN_PENDING,
+        SUCCESS_WITH_EVM_EVIDENCE
     }
 }

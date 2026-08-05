@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -94,7 +95,19 @@ class EvmProofAnchorAdapterIntegrationTest {
 
         assertThat(submitted.confirmed()).isTrue();
         assertThat(submitted.externalReference()).startsWith("0x").hasSize(66);
-        assertThat(lookedUp).contains(submitted);
+        assertThat(submitted.evidence()).isNotNull();
+        assertThat(submitted.evidence().chainId()).isEqualTo(CHAIN_ID);
+        assertThat(submitted.evidence().contractAddress()).isEqualTo(contractAddress);
+        assertThat(submitted.evidence().transactionHash())
+                .isEqualTo(submitted.externalReference());
+        assertThat(submitted.evidence().readBackCommitment())
+                .containsExactly(HexFormat.of().parseHex(COMMITMENT));
+        assertThat(lookedUp).get().satisfies(receipt -> {
+            assertThat(receipt.externalReference())
+                    .isEqualTo(submitted.externalReference());
+            assertThat(receipt.anchoredAt()).isEqualTo(submitted.anchoredAt());
+            assertThat(receipt.confirmed()).isTrue();
+        });
     }
 
     @Test
@@ -106,7 +119,8 @@ class EvmProofAnchorAdapterIntegrationTest {
         var first = adapter.submit(command(commitment));
         var second = adapter.submit(command(commitment));
 
-        assertThat(second).isEqualTo(first);
+        assertThat(second.externalReference()).isEqualTo(first.externalReference());
+        assertThat(second.anchoredAt()).isEqualTo(first.anchoredAt());
     }
 
     @Test

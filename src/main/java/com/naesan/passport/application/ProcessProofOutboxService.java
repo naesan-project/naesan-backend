@@ -209,7 +209,8 @@ public class ProcessProofOutboxService {
     ) {
         ProofAnchor confirmedProof = proofAnchor.confirmReconciled(
                 receipt.externalReference(),
-                receipt.anchoredAt()
+                receipt.anchoredAt(),
+                receipt.evidence()
         );
         OutboxEvent succeededEvent = claim.event().succeed(receipt.anchoredAt());
         boolean proofConfirmed = proofAnchorRepository.confirmReconciled(
@@ -349,7 +350,7 @@ public class ProcessProofOutboxService {
     ) {
         ProofAnchor confirmedProof = proofAnchor
                 .submit(receipt.externalReference(), receipt.anchoredAt())
-                .confirm(receipt.anchoredAt());
+                .confirm(receipt.anchoredAt(), receipt.evidence());
         OutboxEvent succeededEvent = claim.event().succeed(receipt.anchoredAt());
 
         boolean proofConfirmed = proofAnchorRepository.confirmPrepared(confirmedProof);

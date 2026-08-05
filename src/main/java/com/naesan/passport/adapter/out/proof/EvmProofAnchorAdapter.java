@@ -41,6 +41,7 @@ import com.naesan.passport.application.port.out.ProofAnchorReceipt;
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderCapabilities;
 import com.naesan.passport.application.port.out.ProofProviderException;
+import com.naesan.passport.domain.EvmAnchorEvidence;
 
 public final class EvmProofAnchorAdapter implements ProofAnchorPort {
     private static final BigInteger MINIMUM_GAS_LIMIT = BigInteger.valueOf(100_000L);
@@ -111,7 +112,8 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
             throw ambiguous("SUBMIT_RESULT_UNKNOWN");
         }
 
-        return receipt(transactionHash).orElseGet(() -> new ProofAnchorReceipt(
+        return receipt(transactionHash, decodeCommitment(command.commitment()))
+                .orElseGet(() -> new ProofAnchorReceipt(
                 transactionHash,
                 clock.instant(),
                 false
@@ -129,7 +131,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
 
         String transactionHash = findAnchorTransaction(commitmentBytes)
                 .orElseThrow(() -> permanent("ANCHOR_EVENT_NOT_FOUND"));
-        Optional<ProofAnchorReceipt> receipt = receipt(transactionHash);
+        Optional<ProofAnchorReceipt> receipt = receipt(transactionHash, commitmentBytes);
         if (receipt.isEmpty()) {
             return Optional.of(new ProofAnchorReceipt(
                     transactionHash,
@@ -138,11 +140,10 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
             ));
         }
         ProofAnchorReceipt resolved = receipt.orElseThrow();
-        return Optional.of(new ProofAnchorReceipt(
-                resolved.externalReference(),
-                lookupResult.anchoredAt(),
-                resolved.confirmed()
-        ));
+        if (!resolved.anchoredAt().equals(lookupResult.anchoredAt())) {
+            throw permanent("READ_BACK_MISMATCH");
+        }
+        return Optional.of(resolved);
     }
 
     private String sendAnchorTransaction(String commitment) throws IOException {
@@ -205,7 +206,10 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 : estimate.max(MINIMUM_GAS_LIMIT);
     }
 
-    private Optional<ProofAnchorReceipt> receipt(String transactionHash) {
+    private Optional<ProofAnchorReceipt> receipt(
+            String transactionHash,
+            byte[] commitment
+    ) {
         for (int attempt = 0; attempt < properties.receiptAttempts(); attempt++) {
             try {
                 Optional<TransactionReceipt> receipt = web3j
@@ -213,7 +217,10 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                         .send()
                         .getTransactionReceipt();
                 if (receipt.isPresent()) {
-                    return Optional.of(toProofReceipt(receipt.orElseThrow()));
+                    return Optional.of(toProofReceipt(
+                            receipt.orElseThrow(),
+                            commitment
+                    ));
                 }
                 pause();
             } catch (IOException exception) {
@@ -223,17 +230,41 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         return Optional.empty();
     }
 
-    private ProofAnchorReceipt toProofReceipt(TransactionReceipt receipt) {
+    private ProofAnchorReceipt toProofReceipt(
+            TransactionReceipt receipt,
+            byte[] commitment
+    ) {
         if (!receipt.isStatusOK()) {
             throw permanent("CONTRACT_REVERT");
         }
         BigInteger blockNumber = receipt.getBlockNumber();
         EthBlock.Block block = getBlock(blockNumber);
         int confirmations = currentConfirmations(blockNumber);
+        LookupResult readBack = callLookup(commitment);
+        if (!readBack.exists()) {
+            throw permanent("READ_BACK_MISMATCH");
+        }
+        Instant anchoredAt = Instant.ofEpochSecond(
+                block.getTimestamp().longValueExact()
+        );
+        if (!anchoredAt.equals(readBack.anchoredAt())) {
+            throw permanent("READ_BACK_MISMATCH");
+        }
+        EvmAnchorEvidence evidence = new EvmAnchorEvidence(
+                properties.chainId(),
+                properties.contractAddress(),
+                receipt.getTransactionHash(),
+                blockNumber,
+                block.getHash(),
+                confirmations,
+                commitment,
+                clock.instant()
+        );
         return new ProofAnchorReceipt(
                 receipt.getTransactionHash(),
-                Instant.ofEpochSecond(block.getTimestamp().longValueExact()),
-                confirmations >= properties.requiredConfirmations()
+                anchoredAt,
+                confirmations >= properties.requiredConfirmations(),
+                evidence
         );
     }
 

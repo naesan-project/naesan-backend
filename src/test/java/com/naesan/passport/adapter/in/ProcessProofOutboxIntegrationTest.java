@@ -131,6 +131,35 @@ class ProcessProofOutboxIntegrationTest {
     }
 
     @Test
+    @DisplayName("확정된 EVM 기준점의 체인 증거를 proof와 함께 저장한다")
+    void persistsConfirmedEvmEvidence() {
+        proofAnchorPort.setOutcome(ProofOutcome.SUCCESS_WITH_EVM_EVIDENCE);
+
+        boolean processed = processProofOutboxService.processNext("worker-1");
+
+        assertThat(processed).isTrue();
+        assertThat(proofState()).isEqualTo("CONFIRMED");
+        var evidence = jdbcTemplate.queryForMap("""
+                SELECT
+                    chain_id,
+                    contract_address,
+                    transaction_hash,
+                    block_number,
+                    confirmation_count,
+                    commitment,
+                    read_back_commitment
+                FROM proof_anchors
+                """);
+        assertThat(evidence.get("chain_id")).isEqualTo(new BigDecimal("11155111"));
+        assertThat(evidence.get("contract_address")).isEqualTo("0x" + "2".repeat(40));
+        assertThat(evidence.get("transaction_hash")).isEqualTo("0x" + "1".repeat(64));
+        assertThat(evidence.get("block_number")).isEqualTo(new BigDecimal("123"));
+        assertThat(evidence.get("confirmation_count")).isEqualTo(2);
+        assertThat((byte[]) evidence.get("read_back_commitment"))
+                .containsExactly((byte[]) evidence.get("commitment"));
+    }
+
+    @Test
     @DisplayName("일시적 외부 호출 실패는 Passport를 유지하고 retry를 예약한다")
     void keepsPassportActiveWhenExternalCallFails() {
         proofAnchorPort.setOutcome(ProofOutcome.RETRYABLE_FAILURE);

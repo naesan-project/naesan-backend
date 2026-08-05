@@ -1,6 +1,7 @@
 package com.naesan.passport.domain;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.UUID;
 
 public final class ProofAnchor {
@@ -13,6 +14,7 @@ public final class ProofAnchor {
     private final byte[] commitment;
     private final ProofAnchorState state;
     private final String externalReference;
+    private final EvmAnchorEvidence evmEvidence;
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -24,6 +26,7 @@ public final class ProofAnchor {
             byte[] commitment,
             ProofAnchorState state,
             String externalReference,
+            EvmAnchorEvidence evmEvidence,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -34,6 +37,8 @@ public final class ProofAnchor {
                 anchorSalt,
                 commitment,
                 state,
+                externalReference,
+                evmEvidence,
                 createdAt,
                 updatedAt
         );
@@ -44,6 +49,7 @@ public final class ProofAnchor {
         this.commitment = commitment.clone();
         this.state = state;
         this.externalReference = externalReference;
+        this.evmEvidence = evmEvidence;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -55,6 +61,8 @@ public final class ProofAnchor {
             byte[] anchorSalt,
             byte[] commitment,
             ProofAnchorState state,
+            String externalReference,
+            EvmAnchorEvidence evmEvidence,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -79,6 +87,12 @@ public final class ProofAnchor {
         if (updatedAt.isBefore(createdAt)) {
             throw new IllegalArgumentException("Proof anchor 수정 시각은 생성 시각보다 빠를 수 없습니다.");
         }
+        if (evmEvidence != null
+                && (state != ProofAnchorState.CONFIRMED
+                || !evmEvidence.transactionHash().equals(externalReference)
+                || !Arrays.equals(commitment, evmEvidence.readBackCommitment()))) {
+            throw new IllegalArgumentException("EVM 기준점 증거가 proof anchor와 일치하지 않습니다.");
+        }
     }
 
     public static ProofAnchor prepare(
@@ -95,8 +109,35 @@ public final class ProofAnchor {
                 anchorCommitment.commitment(),
                 ProofAnchorState.PREPARED,
                 null,
+                null,
                 preparedAt,
                 preparedAt
+        );
+    }
+
+    public static ProofAnchor restore(
+            UUID id,
+            UUID passportId,
+            int schemaVersion,
+            byte[] anchorSalt,
+            byte[] commitment,
+            ProofAnchorState state,
+            String externalReference,
+            EvmAnchorEvidence evmEvidence,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        return new ProofAnchor(
+                id,
+                passportId,
+                schemaVersion,
+                anchorSalt,
+                commitment,
+                state,
+                externalReference,
+                evmEvidence,
+                createdAt,
+                updatedAt
         );
     }
 
@@ -111,7 +152,7 @@ public final class ProofAnchor {
             Instant createdAt,
             Instant updatedAt
     ) {
-        return new ProofAnchor(
+        return restore(
                 id,
                 passportId,
                 schemaVersion,
@@ -119,6 +160,7 @@ public final class ProofAnchor {
                 commitment,
                 state,
                 externalReference,
+                null,
                 createdAt,
                 updatedAt
         );
@@ -139,12 +181,20 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.SUBMITTED,
                 externalReference,
+                evmEvidence,
                 createdAt,
                 submittedAt
         );
     }
 
     public ProofAnchor confirm(Instant confirmedAt) {
+        return confirm(confirmedAt, evmEvidence);
+    }
+
+    public ProofAnchor confirm(
+            Instant confirmedAt,
+            EvmAnchorEvidence confirmedEvidence
+    ) {
         if (state != ProofAnchorState.SUBMITTED) {
             throw new IllegalStateException("제출된 외부 증명만 확정할 수 있습니다.");
         }
@@ -156,6 +206,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.CONFIRMED,
                 externalReference,
+                confirmedEvidence,
                 createdAt,
                 confirmedAt
         );
@@ -173,6 +224,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.RECONCILE_PENDING,
                 null,
+                evmEvidence,
                 createdAt,
                 changedAt
         );
@@ -193,6 +245,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.RECONCILE_PENDING,
                 externalReference,
+                evmEvidence,
                 createdAt,
                 changedAt
         );
@@ -201,6 +254,18 @@ public final class ProofAnchor {
     public ProofAnchor confirmReconciled(
             String reconciledExternalReference,
             Instant confirmedAt
+    ) {
+        return confirmReconciled(
+                reconciledExternalReference,
+                confirmedAt,
+                evmEvidence
+        );
+    }
+
+    public ProofAnchor confirmReconciled(
+            String reconciledExternalReference,
+            Instant confirmedAt,
+            EvmAnchorEvidence confirmedEvidence
     ) {
         if (state != ProofAnchorState.RECONCILE_PENDING) {
             throw new IllegalStateException("대사 대기 중인 외부 증명만 확정할 수 있습니다.");
@@ -217,6 +282,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.CONFIRMED,
                 reconciledExternalReference,
+                confirmedEvidence,
                 createdAt,
                 confirmedAt
         );
@@ -233,6 +299,7 @@ public final class ProofAnchor {
                 anchorSalt,
                 commitment,
                 ProofAnchorState.PREPARED,
+                null,
                 null,
                 createdAt,
                 changedAt
@@ -251,6 +318,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.MANUAL_REVIEW,
                 externalReference,
+                evmEvidence,
                 createdAt,
                 changedAt
         );
@@ -268,6 +336,7 @@ public final class ProofAnchor {
                 commitment,
                 ProofAnchorState.RECONCILE_PENDING,
                 externalReference,
+                evmEvidence,
                 createdAt,
                 changedAt
         );
@@ -299,6 +368,10 @@ public final class ProofAnchor {
 
     public String externalReference() {
         return externalReference;
+    }
+
+    public EvmAnchorEvidence evmEvidence() {
+        return evmEvidence;
     }
 
     public Instant createdAt() {

@@ -41,13 +41,15 @@ public record PassportDetailsResponse(
 
     public record ProofResponse(
             String state,
-            String commitment
+            String commitment,
+            EvmProofResponse evm
     ) {
 
         private static ProofResponse from(ProofAnchor proofAnchor) {
             return new ProofResponse(
                     proofAnchor.state().name(),
-                    HexFormat.of().formatHex(proofAnchor.commitment())
+                    HexFormat.of().formatHex(proofAnchor.commitment()),
+                    EvmProofResponse.from(proofAnchor)
             );
         }
     }

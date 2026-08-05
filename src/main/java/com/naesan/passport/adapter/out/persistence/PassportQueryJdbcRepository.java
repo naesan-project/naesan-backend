@@ -1,5 +1,6 @@
 package com.naesan.passport.adapter.out.persistence;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Repository;
 
 import com.naesan.passport.application.PassportDetails;
 import com.naesan.passport.application.port.out.PassportQueryRepository;
+import com.naesan.passport.domain.EvmAnchorEvidence;
 import com.naesan.passport.domain.Passport;
 import com.naesan.passport.domain.PassportStatus;
 import com.naesan.passport.domain.ProofAnchor;
@@ -34,6 +36,14 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 pa.commitment,
                 pa.state AS proof_state,
                 pa.external_reference,
+                pa.chain_id,
+                pa.contract_address,
+                pa.transaction_hash,
+                pa.block_number,
+                pa.block_hash,
+                pa.confirmation_count,
+                pa.read_back_commitment,
+                pa.chain_checked_at,
                 pa.created_at AS proof_created_at,
                 pa.updated_at AS proof_updated_at,
                 pe.product_name,
@@ -105,6 +115,7 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 resultSet.getBytes("commitment"),
                 ProofAnchorState.valueOf(resultSet.getString("proof_state")),
                 resultSet.getString("external_reference"),
+                mapEvmEvidence(resultSet),
                 resultSet.getObject("proof_created_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("proof_updated_at", OffsetDateTime.class).toInstant()
         );
@@ -114,6 +125,23 @@ public class PassportQueryJdbcRepository implements PassportQueryRepository {
                 resultSet.getString("product_name"),
                 resultSet.getString("merchant_name"),
                 resultSet.getObject("purchased_at", LocalDate.class)
+        );
+    }
+
+    private EvmAnchorEvidence mapEvmEvidence(ResultSet resultSet) throws SQLException {
+        BigDecimal chainId = resultSet.getBigDecimal("chain_id");
+        if (chainId == null) {
+            return null;
+        }
+        return new EvmAnchorEvidence(
+                chainId.toBigIntegerExact(),
+                resultSet.getString("contract_address"),
+                resultSet.getString("transaction_hash"),
+                resultSet.getBigDecimal("block_number").toBigIntegerExact(),
+                resultSet.getString("block_hash"),
+                resultSet.getInt("confirmation_count"),
+                resultSet.getBytes("read_back_commitment"),
+                resultSet.getObject("chain_checked_at", OffsetDateTime.class).toInstant()
         );
     }
 }
