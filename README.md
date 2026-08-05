@@ -147,10 +147,7 @@ EVM adapter는 다음 상태를 구분합니다.
 git clone https://github.com/naesan-project/naesan-backend.git
 git clone https://github.com/naesan-project/naesan-frontend.git
 
-cd naesan-frontend
-docker build -t naesan-frontend:local .
-
-cd ../naesan-backend
+cd naesan-backend
 cp .env.example .env
 docker compose --env-file .env -f compose.local.yaml up --build
 ```
@@ -160,6 +157,8 @@ docker compose --env-file .env -f compose.local.yaml up --build
 - 백엔드 readiness: `http://localhost:8080/ready`
 
 `compose.local.yaml`은 HTTP origin과 비보안 refresh cookie를 사용하는 로컬 전용 구성으로 PostgreSQL, MinIO, Spring Boot API와 프론트엔드 Nginx를 실행합니다. 운영 환경은 `production` profile과 HTTPS origin, Secure refresh cookie를 사용하며 이후 배포 플랫폼 설정에서 별도로 구성합니다. `.env.example`은 로컬 예시이며 실제 비밀번호, RPC URL, 개인 키와 클라우드 자격 증명을 커밋하면 안 됩니다.
+
+기본 frontend build context는 형제 경로인 `../naesan-frontend`입니다. 다른 위치에 clone했다면 `.env`의 `NAESAN_FRONTEND_CONTEXT`를 해당 경로로 변경합니다.
 
 ## 주요 환경변수
 
@@ -203,6 +202,10 @@ cd e2e
 npm ci
 npm run install:browser
 npm test
+
+# 깨끗한 임시 Compose에서 가입→발급→공유→이전 smoke
+cd ..
+bash operations/verify-local-compose.sh
 ```
 
 현재 기본 Spring test suite는 367개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트와 production Docker 이미지 빌드를 실행합니다.

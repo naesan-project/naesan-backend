@@ -1,7 +1,15 @@
+import {fileURLToPath} from 'node:url';
+
 export const PASSWORD = 'correct horse battery staple';
+const API_CLIENT_PATH = fileURLToPath(
+    new URL('../frontend/api-client.js', import.meta.url),
+);
 
 export async function openClient(page) {
   await page.goto('/');
+  if (new URL(page.url()).port !== '5173') {
+    await page.addScriptTag({path: API_CLIENT_PATH});
+  }
   await page.waitForFunction(() => window.naesan !== undefined);
 }
 

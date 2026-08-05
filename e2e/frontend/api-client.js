@@ -1,4 +1,6 @@
-const API_URL = 'http://localhost:18080/api';
+const API_URL = window.location.port === '5173'
+  ? 'http://localhost:18080/api'
+  : `${window.location.origin}/api`;
 const EVIDENCE_FILE_BASE64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 let accessToken = '';

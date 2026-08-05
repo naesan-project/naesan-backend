@@ -5,6 +5,7 @@
   "scripts": {
     "install:browser": "playwright install chromium",
     "test": "playwright test",
+    "test:compose": "playwright test --config playwright.compose.config.js",
     "test:core": "playwright test tests/core-local.spec.js",
     "test:transfer": "playwright test tests/transfer.spec.js"
   },

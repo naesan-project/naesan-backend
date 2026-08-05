@@ -119,7 +119,11 @@ test('fresh local에서 가입부터 새 보유자의 공개 검증까지 핵심
   }));
 
   await anonymousPage.evaluate(() => {
-    document.querySelector('#status').textContent = [
+    const status = document.querySelector('#status');
+    if (!status) {
+      return;
+    }
+    status.textContent = [
       'signup: completed',
       'evidence: confirmed',
       'proof: confirmed',

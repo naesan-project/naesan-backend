@@ -41,6 +41,26 @@ class ComposeLocalProfilePropertiesTest {
                 );
     }
 
+    @Test
+    @DisplayName("Compose local profile은 fake proof worker를 즉시 실행할 수 있다")
+    void runsLocalProofWorkerWithoutInitialDelay() throws IOException {
+        Properties properties = composeLocalProperties();
+
+        assertThat(properties)
+                .containsEntry(
+                        "naesan.proof.provider",
+                        "${NAESAN_PROOF_PROVIDER:fake}"
+                )
+                .containsEntry(
+                        "naesan.proof.worker.enabled",
+                        "${NAESAN_PROOF_WORKER_ENABLED:true}"
+                )
+                .containsEntry(
+                        "naesan.proof.worker.initial-delay",
+                        "${NAESAN_PROOF_WORKER_INITIAL_DELAY:0s}"
+                );
+    }
+
     private Properties composeLocalProperties() throws IOException {
         Properties properties = new Properties();
         try (InputStream content = getClass().getResourceAsStream(
