@@ -23,7 +23,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -38,6 +37,9 @@ import com.naesan.evidence.application.CreateEvidenceDraftCommand;
 import com.naesan.evidence.application.CreateEvidenceDraftService;
 import com.naesan.evidence.domain.EvidenceFileState;
 import com.naesan.security.AuthenticatedAccount;
+import com.naesan.security.TokenSession;
+import com.naesan.security.TokenSessionException;
+import com.naesan.security.TokenSessionManager;
 
 @SpringBootTest(properties =
         "naesan.storage.local.root=build/test-storage/account-deletion")
@@ -54,6 +56,7 @@ class AccountDeletionApiIntegrationTest {
     private final AuthenticateAccountService authenticateAccountService;
     private final CreateEvidenceDraftService createEvidenceDraftService;
     private final AttachEvidenceFileService attachEvidenceFileService;
+    private final TokenSessionManager tokenSessionManager;
     private final JdbcTemplate jdbcTemplate;
 
     @Autowired
@@ -63,6 +66,7 @@ class AccountDeletionApiIntegrationTest {
             AuthenticateAccountService authenticateAccountService,
             CreateEvidenceDraftService createEvidenceDraftService,
             AttachEvidenceFileService attachEvidenceFileService,
+            TokenSessionManager tokenSessionManager,
             JdbcTemplate jdbcTemplate
     ) {
         this.mockMvc = mockMvc;
@@ -70,6 +74,7 @@ class AccountDeletionApiIntegrationTest {
         this.authenticateAccountService = authenticateAccountService;
         this.createEvidenceDraftService = createEvidenceDraftService;
         this.attachEvidenceFileService = attachEvidenceFileService;
+        this.tokenSessionManager = tokenSessionManager;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -85,6 +90,7 @@ class AccountDeletionApiIntegrationTest {
     @DisplayName("계정 삭제는 접근을 차단하고 구매 증빙 파일을 삭제한다")
     void deletesAccountEvidenceAndBlocksAccess() throws Exception {
         Account account = registerAccountService.register(EMAIL, RAW_PASSWORD);
+        TokenSession tokenSession = tokenSessionManager.start(account);
         var evidence = createEvidenceDraftService.create(
                 new CreateEvidenceDraftCommand(
                         account.id(),
@@ -102,7 +108,6 @@ class AccountDeletionApiIntegrationTest {
                 new ByteArrayInputStream(PDF_CONTENT),
                 "application/pdf"
         );
-        MockHttpSession session = new MockHttpSession();
         AuthenticatedAccount principal = new AuthenticatedAccount(
                 account.id(),
                 EMAIL,
@@ -110,12 +115,10 @@ class AccountDeletionApiIntegrationTest {
         );
 
         mockMvc.perform(delete("/api/accounts/current")
-                        .session(session)
                         .with(authentication(authenticatedPrincipal(principal)))
                         .with(csrf()))
                 .andExpect(status().isNoContent());
 
-        assertThat(session.isInvalid()).isTrue();
         assertThat(accountStatus(account)).isEqualTo("DELETION_PENDING");
         assertThat(fileState(evidence.id()))
                 .isEqualTo(EvidenceFileState.DELETED.name());
@@ -124,6 +127,9 @@ class AccountDeletionApiIntegrationTest {
                 .isInstanceOf(AccountException.class)
                 .extracting(exception -> ((AccountException) exception).code())
                 .isEqualTo(AccountErrorCode.INVALID_CREDENTIALS);
+        assertThatThrownBy(() ->
+                tokenSessionManager.refresh(tokenSession.rawRefreshToken()))
+                .isInstanceOf(TokenSessionException.class);
 
         mockMvc.perform(get("/api/evidence")
                         .with(authentication(authenticatedPrincipal(principal))))

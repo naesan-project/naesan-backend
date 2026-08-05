@@ -20,6 +20,8 @@ import com.naesan.passport.application.port.out.ProofAnchorPort;
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(properties = {
         "naesan.security.frontend-origin=https://naesan.example.com",
+        "naesan.security.token.jwt-secret="
+                + "bmFlc2FuLWxvY2FsLWRldmVsb3BtZW50LWtleS0zMmI=",
         "naesan.storage.s3.bucket=naesan-private",
         "naesan.storage.s3.region=ap-northeast-2"
 })

@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.naesan.account.application.AccountException;
+import com.naesan.security.TokenSessionException;
 
 @RestControllerAdvice(assignableTypes = {
         AccountApiController.class,
@@ -61,6 +62,15 @@ public class AccountApiExceptionHandler {
                 exception.getMessage()
         );
         return ResponseEntity.status(status).body(response);
+    }
+
+    @ExceptionHandler(TokenSessionException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    ApiErrorResponse handleTokenSessionException(TokenSessionException exception) {
+        return new ApiErrorResponse(
+                exception.code().name(),
+                exception.getMessage()
+        );
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

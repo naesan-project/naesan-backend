@@ -43,7 +43,7 @@ class ProductionEnvironmentGuardTest {
                 false,
                 "unconfigured",
                 false
-        )).hasMessage("Production session cookie는 Secure여야 합니다.");
+        )).hasMessage("Production refresh token cookie는 Secure여야 합니다.");
     }
 
     @Test

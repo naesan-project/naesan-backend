@@ -1,7 +1,6 @@
 package com.naesan.security;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.UUID;
 
 public final class RefreshToken {
@@ -167,33 +166,4 @@ public final class RefreshToken {
         return revokedAt;
     }
 
-    @Override
-    public boolean equals(Object object) {
-        if (this == object) {
-            return true;
-        }
-        if (!(object instanceof RefreshToken token)) {
-            return false;
-        }
-        return id.equals(token.id)
-                && accountId.equals(token.accountId)
-                && Arrays.equals(tokenHash, token.tokenHash)
-                && issuedAt.equals(token.issuedAt)
-                && expiresAt.equals(token.expiresAt)
-                && java.util.Objects.equals(consumedAt, token.consumedAt)
-                && java.util.Objects.equals(revokedAt, token.revokedAt);
-    }
-
-    @Override
-    public int hashCode() {
-        int result = java.util.Objects.hash(
-                id,
-                accountId,
-                issuedAt,
-                expiresAt,
-                consumedAt,
-                revokedAt
-        );
-        return 31 * result + Arrays.hashCode(tokenHash);
-    }
 }

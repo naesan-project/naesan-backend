@@ -43,14 +43,7 @@ public class ActiveAccountFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        invalidateSession(request);
         SecurityContextHolder.clearContext();
         response.sendError(HttpStatus.UNAUTHORIZED.value());
-    }
-
-    private void invalidateSession(HttpServletRequest request) {
-        if (request.getSession(false) != null) {
-            request.getSession(false).invalidate();
-        }
     }
 }

@@ -31,6 +31,14 @@ class ProductionProfilePropertiesTest {
                         "${NAESAN_FRONTEND_ORIGIN}"
                 )
                 .containsEntry(
+                        "naesan.security.token.jwt-secret",
+                        "${NAESAN_AUTH_JWT_SECRET}"
+                )
+                .containsEntry(
+                        "naesan.security.token.refresh-cookie-secure",
+                        "true"
+                )
+                .containsEntry(
                         "naesan.storage.s3.bucket",
                         "${NAESAN_S3_BUCKET}"
                 )

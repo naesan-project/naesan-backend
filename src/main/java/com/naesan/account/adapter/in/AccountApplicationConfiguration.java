@@ -1,7 +1,9 @@
 package com.naesan.account.adapter.in;
 
 import java.time.Clock;
+import java.time.Duration;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -14,6 +16,8 @@ import com.naesan.account.application.port.out.AccountEvidenceDeletion;
 import com.naesan.account.application.port.out.AccountRepository;
 import com.naesan.account.application.port.out.PasswordHasher;
 import com.naesan.account.domain.PasswordHash;
+import com.naesan.security.RefreshTokenRepository;
+import com.naesan.account.adapter.in.web.RefreshTokenCookieManager;
 
 @Configuration(proxyBeanMethods = false)
 public class AccountApplicationConfiguration {
@@ -41,12 +45,16 @@ public class AccountApplicationConfiguration {
     DeleteAccountService deleteAccountService(
             AccountRepository accountRepository,
             AccountEvidenceDeletion evidenceDeletion,
-            PlatformTransactionManager transactionManager
+            RefreshTokenRepository refreshTokenRepository,
+            PlatformTransactionManager transactionManager,
+            Clock clock
     ) {
         return new DeleteAccountService(
                 accountRepository,
                 evidenceDeletion,
-                new TransactionTemplate(transactionManager)
+                refreshTokenRepository,
+                new TransactionTemplate(transactionManager),
+                clock
         );
     }
 
@@ -57,5 +65,13 @@ public class AccountApplicationConfiguration {
             Clock clock
     ) {
         return new RegisterAccountService(accountRepository, passwordHasher, clock);
+    }
+
+    @Bean
+    RefreshTokenCookieManager refreshTokenCookieManager(
+            @Value("${naesan.security.token.refresh-cookie-secure}") boolean secure,
+            @Value("${naesan.security.token.refresh-time-to-live}") Duration timeToLive
+    ) {
+        return new RefreshTokenCookieManager(secure, timeToLive);
     }
 }

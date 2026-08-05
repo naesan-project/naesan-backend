@@ -2,13 +2,10 @@ package com.naesan.account.adapter.in.web;
 
 import java.net.URI;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -47,15 +44,9 @@ public class AccountApiController {
 
     @DeleteMapping("/current")
     public ResponseEntity<Void> deleteCurrentAccount(
-            @AuthenticationPrincipal AuthenticatedAccount account,
-            HttpServletRequest request
+            @AuthenticationPrincipal AuthenticatedAccount account
     ) {
         deleteAccountService.delete(account.id());
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            session.invalidate();
-        }
-        SecurityContextHolder.clearContext();
         return ResponseEntity.noContent().build();
     }
 }

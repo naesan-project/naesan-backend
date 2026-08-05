@@ -9,13 +9,13 @@ public final class ProductionEnvironmentGuard {
     public ProductionEnvironmentGuard(
             String frontendOrigin,
             String storageProvider,
-            boolean secureSessionCookie,
+            boolean secureRefreshCookie,
             String proofProvider,
             boolean proofWorkerEnabled
     ) {
         requireHttpsFrontend(frontendOrigin);
         requireS3Storage(storageProvider);
-        requireSecureSessionCookie(secureSessionCookie);
+        requireSecureRefreshCookie(secureRefreshCookie);
         requireConfiguredProofWorker(proofProvider, proofWorkerEnabled);
     }
 
@@ -37,10 +37,10 @@ public final class ProductionEnvironmentGuard {
         }
     }
 
-    private void requireSecureSessionCookie(boolean secureSessionCookie) {
-        if (!secureSessionCookie) {
+    private void requireSecureRefreshCookie(boolean secureRefreshCookie) {
+        if (!secureRefreshCookie) {
             throw new IllegalStateException(
-                    "Production session cookie는 Secure여야 합니다."
+                    "Production refresh token cookie는 Secure여야 합니다."
             );
         }
     }

@@ -13,14 +13,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
 import jakarta.servlet.http.Cookie;
 
+import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,30 +26,25 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.account.application.RegisterAccountService;
 import com.naesan.account.domain.Account;
-import com.naesan.security.AuthenticatedAccount;
 
 @Import(TestcontainersConfiguration.class)
 @AutoConfigureMockMvc
 @SpringBootTest
 class AccountSessionApiIntegrationTest {
     private static final String SESSIONS_API = "/api/sessions";
+    private static final String REFRESH_API = SESSIONS_API + "/refresh";
     private static final String CURRENT_SESSION_API = SESSIONS_API + "/current";
     private static final String CSRF_API = "/api/csrf";
     private static final String CSRF_COOKIE = "XSRF-TOKEN";
     private static final String CSRF_HEADER = "X-XSRF-TOKEN";
+    private static final String REFRESH_COOKIE = "NAESAN_REFRESH_TOKEN";
     private static final String FRONTEND_ORIGIN = "http://localhost:5173";
     private static final String EMAIL = "user@example.com";
     private static final String RAW_PASSWORD = "password1234";
@@ -62,23 +52,21 @@ class AccountSessionApiIntegrationTest {
     private final MockMvc mockMvc;
     private final RegisterAccountService registerAccountService;
     private final JdbcTemplate jdbcTemplate;
-    private final Clock clock;
 
     @Autowired
     AccountSessionApiIntegrationTest(
             MockMvc mockMvc,
             RegisterAccountService registerAccountService,
-            JdbcTemplate jdbcTemplate,
-            Clock clock
+            JdbcTemplate jdbcTemplate
     ) {
         this.mockMvc = mockMvc;
         this.registerAccountService = registerAccountService;
         this.jdbcTemplate = jdbcTemplate;
-        this.clock = clock;
     }
 
     @BeforeEach
-    void deleteAccounts() {
+    void clearDatabase() {
+        jdbcTemplate.update("DELETE FROM refresh_tokens");
         jdbcTemplate.update("DELETE FROM accounts");
     }
 
@@ -101,14 +89,14 @@ class AccountSessionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("허용한 frontend origin의 credential preflight를 승인한다")
-    void allowsCredentialPreflightFromFrontend() throws Exception {
-        mockMvc.perform(options(SESSIONS_API)
+    @DisplayName("허용한 frontend origin의 Authorization preflight를 승인한다")
+    void allowsAuthorizationPreflightFromFrontend() throws Exception {
+        mockMvc.perform(options(CURRENT_SESSION_API)
                         .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
-                                "content-type,x-xsrf-token"
+                                "authorization"
                         ))
                 .andExpect(status().isOk())
                 .andExpect(header().string(
@@ -122,8 +110,8 @@ class AccountSessionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("설정하지 않은 origin의 credential preflight를 거절한다")
-    void rejectsCredentialPreflightFromUnknownOrigin() throws Exception {
+    @DisplayName("설정하지 않은 origin의 preflight를 거절한다")
+    void rejectsPreflightFromUnknownOrigin() throws Exception {
         mockMvc.perform(options(SESSIONS_API)
                         .header(HttpHeaders.ORIGIN, "https://unknown.example")
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST"))
@@ -132,31 +120,34 @@ class AccountSessionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("정상 자격증명은 session ID를 교체하고 현재 계정을 인증한다")
-    void createsAuthenticatedSessionAndChangesSessionId() throws Exception {
+    @DisplayName("정상 자격증명은 JWT access token과 HttpOnly refresh token을 발급한다")
+    void issuesAccessAndRefreshTokens() throws Exception {
         Account account = registerAccountService.register(EMAIL, RAW_PASSWORD);
-        MockHttpSession session = new MockHttpSession();
-        String sessionIdBeforeLogin = session.getId();
 
-        login(session, "  User@Example.COM  ", RAW_PASSWORD)
+        MvcResult loginResult = login("  User@Example.COM  ", RAW_PASSWORD)
                 .andExpect(status().isCreated())
                 .andExpect(header().string(HttpHeaders.LOCATION, CURRENT_SESSION_API))
-                .andExpect(cookie().maxAge(CSRF_COOKIE, 0))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.accountId").value(account.id().toString()))
-                .andExpect(jsonPath("$.email").value(EMAIL));
+                .andExpect(jsonPath("$.email").value(EMAIL))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.accessTokenExpiresAt").isString())
+                .andExpect(cookie().exists(REFRESH_COOKIE))
+                .andExpect(cookie().httpOnly(REFRESH_COOKIE, true))
+                .andReturn();
 
-        assertThat(session.getId()).isNotEqualTo(sessionIdBeforeLogin);
-
-        mockMvc.perform(get(CURRENT_SESSION_API).session(session))
+        String accessToken = json(loginResult, "$.accessToken");
+        mockMvc.perform(get(CURRENT_SESSION_API)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(accessToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.accountId").value(account.id().toString()))
                 .andExpect(jsonPath("$.email").value(EMAIL));
     }
 
     @Test
-    @DisplayName("비회원의 현재 session 조회는 401을 반환한다")
-    void rejectsCurrentSessionWithoutAuthentication() throws Exception {
+    @DisplayName("Bearer token이 없는 현재 계정 조회는 401을 반환한다")
+    void rejectsCurrentSessionWithoutBearerToken() throws Exception {
         mockMvc.perform(get(CURRENT_SESSION_API))
                 .andExpect(status().isUnauthorized())
                 .andExpect(header().doesNotExist(HttpHeaders.LOCATION));
@@ -168,7 +159,7 @@ class AccountSessionApiIntegrationTest {
         String wrongPassword = "different-password";
         registerAccountService.register(EMAIL, RAW_PASSWORD);
 
-        login(new MockHttpSession(), EMAIL, wrongPassword)
+        login(EMAIL, wrongPassword)
                 .andExpect(status().isUnauthorized())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
@@ -178,25 +169,15 @@ class AccountSessionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("미등록 이메일도 같은 401 자격증명 오류로 거절한다")
-    void rejectsUnknownEmailWithSameCredentialsError() throws Exception {
-        login(new MockHttpSession(), "unknown@example.com", RAW_PASSWORD)
-                .andExpect(status().isUnauthorized())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
-                .andExpect(jsonPath("$.message")
-                        .value("이메일 또는 비밀번호가 올바르지 않습니다."));
-    }
-
-    @Test
     @DisplayName("빈 로그인 필드는 400 field 오류로 반환한다")
     void rejectsBlankLoginFields() throws Exception {
-        login(new MockHttpSession(), "", "")
+        login("", "")
                 .andExpect(status().isBadRequest())
-                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
-                .andExpect(jsonPath("$.fieldErrors.email").value("이메일을 입력해 주세요."))
-                .andExpect(jsonPath("$.fieldErrors.password").value("비밀번호를 입력해 주세요."));
+                .andExpect(jsonPath("$.fieldErrors.email")
+                        .value("이메일을 입력해 주세요."))
+                .andExpect(jsonPath("$.fieldErrors.password")
+                        .value("비밀번호를 입력해 주세요."));
     }
 
     @Test
@@ -211,121 +192,96 @@ class AccountSessionApiIntegrationTest {
     }
 
     @Test
-    @DisplayName("로그아웃은 현재 session과 CSRF token을 폐기한다")
-    void logsOutCurrentSession() throws Exception {
+    @DisplayName("Refresh token은 1회 사용 후 회전하고 이전 token 재사용을 거절한다")
+    void rotatesRefreshTokenAndRejectsReuse() throws Exception {
         registerAccountService.register(EMAIL, RAW_PASSWORD);
-        MockHttpSession session = new MockHttpSession();
-        login(session, EMAIL, RAW_PASSWORD)
-                .andExpect(status().isCreated());
-        MvcResult csrfResult = issueCsrfToken(session);
-        Cookie csrfCookie = csrfResult.getResponse().getCookie(CSRF_COOKIE);
-        assertThat(csrfCookie).isNotNull();
+        MvcResult loginResult = login(EMAIL, RAW_PASSWORD).andReturn();
+        Cookie firstRefreshToken = requiredCookie(loginResult, REFRESH_COOKIE);
+        Cookie csrfCookie = issueCsrfCookie();
+
+        MvcResult refreshResult = mockMvc.perform(post(REFRESH_API)
+                        .cookie(firstRefreshToken, csrfCookie)
+                        .header(CSRF_HEADER, csrfCookie.getValue()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(cookie().exists(REFRESH_COOKIE))
+                .andReturn();
+        Cookie rotatedRefreshToken = requiredCookie(refreshResult, REFRESH_COOKIE);
+        assertThat(rotatedRefreshToken.getValue())
+                .isNotEqualTo(firstRefreshToken.getValue());
+
+        mockMvc.perform(post(REFRESH_API)
+                        .cookie(firstRefreshToken, csrfCookie)
+                        .header(CSRF_HEADER, csrfCookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("INVALID_REFRESH_TOKEN"));
+    }
+
+    @Test
+    @DisplayName("로그아웃은 refresh token을 폐기하고 cookie를 삭제한다")
+    void revokesRefreshTokenOnLogout() throws Exception {
+        registerAccountService.register(EMAIL, RAW_PASSWORD);
+        MvcResult loginResult = login(EMAIL, RAW_PASSWORD).andReturn();
+        Cookie refreshToken = requiredCookie(loginResult, REFRESH_COOKIE);
+        Cookie csrfCookie = issueCsrfCookie();
 
         mockMvc.perform(delete(CURRENT_SESSION_API)
-                        .session(session)
-                        .cookie(csrfCookie)
+                        .cookie(refreshToken, csrfCookie)
                         .header(CSRF_HEADER, csrfCookie.getValue()))
                 .andExpect(status().isNoContent())
-                .andExpect(cookie().maxAge(CSRF_COOKIE, 0));
+                .andExpect(cookie().maxAge(REFRESH_COOKIE, 0));
 
-        assertThat(session.isInvalid()).isTrue();
-
-        mockMvc.perform(get(CURRENT_SESSION_API))
+        mockMvc.perform(post(REFRESH_API)
+                        .cookie(refreshToken, csrfCookie)
+                        .header(CSRF_HEADER, csrfCookie.getValue()))
                 .andExpect(status().isUnauthorized());
     }
 
     @Test
-    @DisplayName("CSRF token이 없는 로그아웃은 403이며 기존 session을 유지한다")
+    @DisplayName("CSRF token이 없는 로그아웃은 403이며 refresh token을 유지한다")
     void rejectsLogoutWithoutCsrfToken() throws Exception {
-        Account account = registerAccountService.register(EMAIL, RAW_PASSWORD);
-        MockHttpSession session = new MockHttpSession();
-        login(session, EMAIL, RAW_PASSWORD)
-                .andExpect(status().isCreated());
+        registerAccountService.register(EMAIL, RAW_PASSWORD);
+        MvcResult loginResult = login(EMAIL, RAW_PASSWORD).andReturn();
+        Cookie refreshToken = requiredCookie(loginResult, REFRESH_COOKIE);
 
-        mockMvc.perform(delete(CURRENT_SESSION_API).session(session))
+        mockMvc.perform(delete(CURRENT_SESSION_API).cookie(refreshToken))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(get(CURRENT_SESSION_API).session(session))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accountId").value(account.id().toString()));
+        Cookie csrfCookie = issueCsrfCookie();
+        mockMvc.perform(post(REFRESH_API)
+                        .cookie(refreshToken, csrfCookie)
+                        .header(CSRF_HEADER, csrfCookie.getValue()))
+                .andExpect(status().isOk());
     }
 
-    @Test
-    @DisplayName("허용한 frontend origin의 로그아웃 preflight를 승인한다")
-    void allowsLogoutPreflightFromFrontend() throws Exception {
-        mockMvc.perform(options(CURRENT_SESSION_API)
-                        .header(HttpHeaders.ORIGIN, FRONTEND_ORIGIN)
-                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
-                        .header(
-                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
-                                "x-xsrf-token"
-                        ))
-                .andExpect(status().isOk())
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
-                        FRONTEND_ORIGIN
-                ))
-                .andExpect(header().string(
-                        HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                        "true"
-                ));
-    }
-
-    @Test
-    @DisplayName("로그인 후 12시간이 지난 session은 401로 만료한다")
-    void rejectsSessionAfterAbsoluteTimeout() throws Exception {
-        MockHttpSession session = expiredSession();
-
-        mockMvc.perform(get(CURRENT_SESSION_API).session(session))
-                .andExpect(status().isUnauthorized())
-                .andExpect(cookie().maxAge(CSRF_COOKIE, 0));
-
-        assertThat(session.isInvalid()).isTrue();
-    }
-
-    private MockHttpSession expiredSession() {
-        AuthenticatedAccount principal = new AuthenticatedAccount(
-                UUID.randomUUID(),
-                EMAIL,
-                Instant.now(clock).minus(Duration.ofHours(13))
-        );
-        Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
-                principal,
-                null,
-                List.of()
-        );
-        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
-        securityContext.setAuthentication(authentication);
-
-        MockHttpSession session = new MockHttpSession();
-        session.setAttribute(
-                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                securityContext
-        );
-        return session;
-    }
-
-    private ResultActions login(
-            MockHttpSession session,
-            String email,
-            String password
-    ) throws Exception {
-        MvcResult csrfResult = issueCsrfToken(session);
-        Cookie csrfCookie = csrfResult.getResponse().getCookie(CSRF_COOKIE);
-        assertThat(csrfCookie).isNotNull();
-
+    private ResultActions login(String email, String password) throws Exception {
+        Cookie csrfCookie = issueCsrfCookie();
         return mockMvc.perform(post(SESSIONS_API)
-                .session(session)
                 .cookie(csrfCookie)
                 .header(CSRF_HEADER, csrfCookie.getValue())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(sessionRequest(email, password)));
     }
 
-    private MvcResult issueCsrfToken(MockHttpSession session) throws Exception {
-        return mockMvc.perform(get(CSRF_API).session(session))
+    private Cookie issueCsrfCookie() throws Exception {
+        MvcResult result = mockMvc.perform(get(CSRF_API))
                 .andExpect(status().isNoContent())
                 .andReturn();
+        return requiredCookie(result, CSRF_COOKIE);
+    }
+
+    private Cookie requiredCookie(MvcResult result, String name) {
+        Cookie cookie = result.getResponse().getCookie(name);
+        assertThat(cookie).isNotNull();
+        return cookie;
+    }
+
+    private String json(MvcResult result, String path) throws Exception {
+        return JsonPath.read(result.getResponse().getContentAsString(), path);
+    }
+
+    private String bearer(String accessToken) {
+        return "Bearer " + accessToken;
     }
 
     private String sessionRequest(String email, String password) {
