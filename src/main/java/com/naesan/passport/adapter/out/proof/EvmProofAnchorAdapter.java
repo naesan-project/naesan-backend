@@ -15,17 +15,20 @@ import org.web3j.abi.FunctionEncoder;
 import org.web3j.abi.FunctionReturnDecoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Bool;
+import org.web3j.abi.datatypes.Address;
 import org.web3j.abi.datatypes.Event;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
 import org.web3j.abi.datatypes.generated.Bytes32;
 import org.web3j.abi.datatypes.generated.Uint64;
 import org.web3j.crypto.Credentials;
+import org.web3j.crypto.Hash;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.TransactionEncoder;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.DefaultBlockParameterNumber;
+import org.web3j.protocol.core.Response;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.request.Transaction;
 import org.web3j.protocol.core.methods.response.EthBlock;
@@ -45,6 +48,9 @@ import com.naesan.passport.domain.EvmAnchorEvidence;
 
 public final class EvmProofAnchorAdapter implements ProofAnchorPort {
     private static final BigInteger MINIMUM_GAS_LIMIT = BigInteger.valueOf(100_000L);
+    private static final String DUPLICATE_COMMITMENT_SELECTOR = Hash.sha3String(
+            "CommitmentAlreadyAnchored(bytes32)"
+    ).substring(0, 10).toLowerCase(Locale.ROOT);
     private static final ProofProviderCapabilities CAPABILITIES =
             new ProofProviderCapabilities(true, true);
     private static final Event ANCHORED_EVENT = new Event(
@@ -90,6 +96,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
             if (code == null || code.equals("0x") || code.equals("0x0")) {
                 throw permanent("CONTRACT_NOT_FOUND");
             }
+            verifyWriter();
         } catch (IOException exception) {
             throw retryable("RPC_UNAVAILABLE");
         }
@@ -107,9 +114,10 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         try {
             transactionHash = sendAnchorTransaction(command.commitment());
         } catch (ProofProviderException exception) {
+            if ("COMMITMENT_ALREADY_ANCHORED".equals(exception.errorCode())) {
+                return recoverDuplicate(command.commitment());
+            }
             throw exception;
-        } catch (IOException exception) {
-            throw ambiguous("SUBMIT_RESULT_UNKNOWN");
         }
 
         return receipt(transactionHash, decodeCommitment(command.commitment()))
@@ -118,6 +126,18 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 clock.instant(),
                 false
         ));
+    }
+
+    private ProofAnchorReceipt recoverDuplicate(String commitment) {
+        try {
+            return lookup(commitment)
+                    .orElseThrow(() -> ambiguous("DUPLICATE_RESULT_UNKNOWN"));
+        } catch (ProofProviderException exception) {
+            if (exception.failureType() == ProofFailureType.AMBIGUOUS) {
+                throw exception;
+            }
+            throw ambiguous("DUPLICATE_LOOKUP_UNAVAILABLE");
+        }
     }
 
     @Override
@@ -146,37 +166,46 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         return Optional.of(resolved);
     }
 
-    private String sendAnchorTransaction(String commitment) throws IOException {
+    String sendAnchorTransaction(String commitment) {
         String data = FunctionEncoder.encode(new Function(
                 "anchor",
                 List.of(new Bytes32(decodeCommitment(commitment))),
                 List.of()
         ));
         String sender = credentials.getAddress();
-        BigInteger nonce = web3j.ethGetTransactionCount(
-                sender,
-                DefaultBlockParameterName.PENDING
-        ).send().getTransactionCount();
-        BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
-        BigInteger gasLimit = estimateGas(sender, data);
-        RawTransaction transaction = RawTransaction.createTransaction(
-                nonce,
-                gasPrice,
-                gasLimit,
-                properties.contractAddress(),
-                BigInteger.ZERO,
-                data
-        );
-        byte[] signed = TransactionEncoder.signMessage(
-                transaction,
-                properties.chainId().longValueExact(),
-                credentials
-        );
-        EthSendTransaction response = web3j.ethSendRawTransaction(
-                Numeric.toHexString(signed)
-        ).send();
+        byte[] signed;
+        try {
+            BigInteger nonce = web3j.ethGetTransactionCount(
+                    sender,
+                    DefaultBlockParameterName.PENDING
+            ).send().getTransactionCount();
+            BigInteger gasPrice = web3j.ethGasPrice().send().getGasPrice();
+            BigInteger gasLimit = estimateGas(sender, data);
+            RawTransaction transaction = RawTransaction.createTransaction(
+                    nonce,
+                    gasPrice,
+                    gasLimit,
+                    properties.contractAddress(),
+                    BigInteger.ZERO,
+                    data
+            );
+            signed = TransactionEncoder.signMessage(
+                    transaction,
+                    properties.chainId().longValueExact(),
+                    credentials
+            );
+        } catch (IOException exception) {
+            throw retryable("RPC_UNAVAILABLE");
+        }
+
+        EthSendTransaction response;
+        try {
+            response = web3j.ethSendRawTransaction(Numeric.toHexString(signed)).send();
+        } catch (IOException exception) {
+            throw ambiguous("SUBMIT_RESULT_UNKNOWN");
+        }
         if (response.hasError()) {
-            throw classifySubmissionError(response.getError().getMessage());
+            throw classifySubmissionError(response.getError());
         }
         String transactionHash = response.getTransactionHash();
         if (transactionHash == null || transactionHash.isBlank()) {
@@ -198,7 +227,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 )
         ).send();
         if (response.hasError()) {
-            throw classifySubmissionError(response.getError().getMessage());
+            throw classifySubmissionError(response.getError());
         }
         BigInteger estimate = response.getAmountUsed();
         return estimate == null
@@ -333,6 +362,35 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         }
     }
 
+    private void verifyWriter() throws IOException {
+        Function function = new Function(
+                "writer",
+                List.of(),
+                List.of(new TypeReference<Address>() { })
+        );
+        var response = web3j.ethCall(
+                Transaction.createEthCallTransaction(
+                        credentials.getAddress(),
+                        properties.contractAddress(),
+                        FunctionEncoder.encode(function)
+                ),
+                DefaultBlockParameterName.LATEST
+        ).send();
+        if (response.hasError()) {
+            throw permanent("CONTRACT_MISMATCH");
+        }
+        List<Type> values = FunctionReturnDecoder.decode(
+                response.getValue(),
+                function.getOutputParameters()
+        );
+        if (values.size() != 1 || !(values.get(0) instanceof Address writer)) {
+            throw permanent("CONTRACT_MISMATCH");
+        }
+        if (!writer.getValue().equalsIgnoreCase(credentials.getAddress())) {
+            throw permanent("WRITER_MISMATCH");
+        }
+    }
+
     private Optional<String> findAnchorTransaction(byte[] commitment) {
         EthFilter filter = new EthFilter(
                 new DefaultBlockParameterNumber(properties.deploymentBlock()),
@@ -363,11 +421,17 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         return Numeric.hexStringToByteArray("0x" + commitment);
     }
 
-    private ProofProviderException classifySubmissionError(String message) {
+    ProofProviderException classifySubmissionError(Response.Error error) {
+        String message = error == null ? null : error.getMessage();
+        String data = error == null ? null : error.getData();
         String normalized = message == null ? "" : message.toLowerCase(Locale.ROOT);
-        if (normalized.contains("revert")
-                || normalized.contains("unauthorized")
+        String normalizedData = data == null ? "" : data.toLowerCase(Locale.ROOT);
+        if (normalizedData.contains(DUPLICATE_COMMITMENT_SELECTOR)
                 || normalized.contains("already anchored")) {
+            return permanent("COMMITMENT_ALREADY_ANCHORED");
+        }
+        if (normalized.contains("revert")
+                || normalized.contains("unauthorized")) {
             return permanent("CONTRACT_REVERT");
         }
         if (normalized.contains("insufficient funds")) {

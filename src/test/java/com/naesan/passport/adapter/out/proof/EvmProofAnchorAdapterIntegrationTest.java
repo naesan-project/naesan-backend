@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.web3j.crypto.Credentials;
 
 import com.naesan.passport.application.port.out.ProofAnchorCommand;
 import com.naesan.passport.application.port.out.ProofFailureType;
@@ -122,6 +123,28 @@ class EvmProofAnchorAdapterIntegrationTest {
     }
 
     @Test
+    @DisplayName("서명 계정이 컨트랙트 writer와 다르면 transaction 전에 영구 실패한다")
+    void rejectsWrongWriter() {
+        EvmProofProperties properties = properties(
+                CHAIN_ID,
+                CHAIN.contractAddress(),
+                1
+        );
+        EvmProofAnchorAdapter adapter = new EvmProofAnchorAdapter(
+                CHAIN.web3j(),
+                Credentials.create("1".repeat(64)),
+                properties,
+                Clock.systemUTC()
+        );
+
+        assertThatThrownBy(() -> adapter.submit(command("f".repeat(64))))
+                .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                    assertThat(failure.failureType()).isEqualTo(ProofFailureType.PERMANENT);
+                    assertThat(failure.errorCode()).isEqualTo("WRITER_MISMATCH");
+                });
+    }
+
+    @Test
     @DisplayName("zero commitment의 컨트랙트 revert를 영구 실패로 분류한다")
     void classifiesContractRevertAsPermanent() {
         EvmProofAnchorAdapter adapter = adapter(CHAIN_ID, CHAIN.contractAddress(), 1);
@@ -138,7 +161,20 @@ class EvmProofAnchorAdapterIntegrationTest {
             String address,
             int confirmations
     ) {
-        EvmProofProperties properties = new EvmProofProperties(
+        return new EvmProofAnchorAdapter(
+                CHAIN.web3j(),
+                CHAIN.writer(),
+                properties(chainId, address, confirmations),
+                Clock.systemUTC()
+        );
+    }
+
+    private static EvmProofProperties properties(
+            BigInteger chainId,
+            String address,
+            int confirmations
+    ) {
+        return new EvmProofProperties(
                 CHAIN.rpcUrl(),
                 chainId,
                 address,
@@ -146,12 +182,6 @@ class EvmProofAnchorAdapterIntegrationTest {
                 confirmations,
                 3,
                 Duration.ZERO
-        );
-        return new EvmProofAnchorAdapter(
-                CHAIN.web3j(),
-                CHAIN.writer(),
-                properties,
-                Clock.systemUTC()
         );
     }
 
