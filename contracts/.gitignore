@@ -1,0 +1,21 @@
+# Dependencies
+/node_modules
+
+# Hardhat output
+/artifacts
+/cache
+/coverage
+/dist
+/types
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local deployment output
+/deployments/local
+
+# Editor and operating system files
+.DS_Store
+*.log
