@@ -4,6 +4,9 @@
 .omx
 archive
 build
+contracts/artifacts
+contracts/cache
+contracts/node_modules
 docs
 e2e
 logs
