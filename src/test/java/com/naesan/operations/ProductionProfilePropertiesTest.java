@@ -45,6 +45,47 @@ class ProductionProfilePropertiesTest {
                 .containsEntry(
                         "naesan.storage.s3.region",
                         "${NAESAN_S3_REGION}"
+                )
+                .containsEntry(
+                        "naesan.storage.s3.endpoint",
+                        "${NAESAN_S3_ENDPOINT:}"
+                )
+                .containsEntry(
+                        "naesan.storage.s3.path-style",
+                        "${NAESAN_S3_PATH_STYLE:false}"
+                )
+                .containsEntry(
+                        "naesan.storage.s3.server-side-encryption",
+                        "${NAESAN_S3_SERVER_SIDE_ENCRYPTION:}"
+                );
+    }
+
+    @Test
+    @DisplayName("Production 서버 포트와 DB connection pool은 무료 컨테이너 한도에 맞춘다")
+    void usesRenderPortAndBoundedDatabasePool() throws IOException {
+        Properties properties = productionProperties();
+
+        assertThat(properties)
+                .containsEntry("server.port", "${PORT:8080}")
+                .containsEntry(
+                        "spring.datasource.hikari.maximum-pool-size",
+                        "${NAESAN_DB_MAXIMUM_POOL_SIZE:5}"
+                )
+                .containsEntry(
+                        "spring.datasource.hikari.minimum-idle",
+                        "${NAESAN_DB_MINIMUM_IDLE:0}"
+                )
+                .containsEntry(
+                        "spring.datasource.hikari.connection-timeout",
+                        "${NAESAN_DB_CONNECTION_TIMEOUT:30000}"
+                )
+                .containsEntry(
+                        "spring.datasource.hikari.idle-timeout",
+                        "${NAESAN_DB_IDLE_TIMEOUT:600000}"
+                )
+                .containsEntry(
+                        "spring.datasource.hikari.max-lifetime",
+                        "${NAESAN_DB_MAX_LIFETIME:1800000}"
                 );
     }
 
