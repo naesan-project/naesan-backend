@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -12,16 +14,22 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterNumber;
 import org.web3j.protocol.core.Request;
 import org.web3j.protocol.core.Response;
+import org.web3j.protocol.core.methods.request.EthFilter;
+import org.web3j.protocol.core.methods.response.EthBlockNumber;
 import org.web3j.protocol.core.methods.response.EthEstimateGas;
 import org.web3j.protocol.core.methods.response.EthGasPrice;
 import org.web3j.protocol.core.methods.response.EthGetTransactionCount;
+import org.web3j.protocol.core.methods.response.EthLog;
 
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderException;
@@ -91,6 +99,64 @@ class EvmProofAnchorAdapterTest {
         assertThat(generic.errorCode()).isEqualTo("CONTRACT_REVERT");
         assertThat(duplicate.failureType()).isEqualTo(ProofFailureType.PERMANENT);
         assertThat(duplicate.errorCode()).isEqualTo("COMMITMENT_ALREADY_ANCHORED");
+    }
+
+    @Test
+    @DisplayName("anchor 이벤트 조회는 최신 블록부터 10블록 단위로 나눈다")
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    void looksUpAnchorEventInTenBlockChunks() throws IOException {
+        Web3j web3j = mock(Web3j.class);
+        Request blockNumberRequest = mock(Request.class);
+        Request logRequest = mock(Request.class);
+        EthBlockNumber blockNumber = mock(EthBlockNumber.class);
+        EthLog emptyLogs = mock(EthLog.class);
+        EthLog matchingLogs = mock(EthLog.class);
+        EthLog.LogObject matchingLog = new EthLog.LogObject(
+                false,
+                "0x0",
+                "0x0",
+                "0xtransaction",
+                "0xblock",
+                "0x4",
+                "0x0000000000000000000000000000000000000001",
+                "0x",
+                null,
+                List.of()
+        );
+        ArgumentCaptor<EthFilter> filterCaptor = ArgumentCaptor.forClass(EthFilter.class);
+        when(web3j.ethBlockNumber()).thenReturn(blockNumberRequest);
+        when(blockNumberRequest.send()).thenReturn(blockNumber);
+        when(blockNumber.getBlockNumber()).thenReturn(BigInteger.valueOf(24L));
+        when(web3j.ethGetLogs(filterCaptor.capture())).thenReturn(logRequest);
+        when(logRequest.send()).thenReturn(emptyLogs, emptyLogs, matchingLogs);
+        when(emptyLogs.getLogs()).thenReturn(List.of());
+        when(matchingLogs.getLogs()).thenReturn(List.of(matchingLog));
+        EvmProofAnchorAdapter adapter = adapter(web3j);
+
+        assertThat(adapter.findAnchorTransaction(new byte[32]))
+                .contains("0xtransaction");
+        verify(web3j, times(3)).ethGetLogs(any(EthFilter.class));
+        assertThat(filterCaptor.getAllValues())
+                .extracting(
+                        filter -> ((DefaultBlockParameterNumber) filter.getFromBlock())
+                                .getBlockNumber(),
+                        filter -> ((DefaultBlockParameterNumber) filter.getToBlock())
+                                .getBlockNumber()
+                )
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(
+                                BigInteger.valueOf(15L),
+                                BigInteger.valueOf(24L)
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                BigInteger.valueOf(5L),
+                                BigInteger.valueOf(14L)
+                        ),
+                        org.assertj.core.groups.Tuple.tuple(
+                                BigInteger.ZERO,
+                                BigInteger.valueOf(4L)
+                        )
+                );
     }
 
     private static EvmProofAnchorAdapter adapter(Web3j web3j) {

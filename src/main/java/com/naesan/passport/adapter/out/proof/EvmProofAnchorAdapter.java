@@ -26,6 +26,7 @@ import org.web3j.crypto.Hash;
 import org.web3j.crypto.RawTransaction;
 import org.web3j.crypto.TransactionEncoder;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.exceptions.ClientConnectionException;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.DefaultBlockParameterNumber;
 import org.web3j.protocol.core.Response;
@@ -48,6 +49,7 @@ import com.naesan.passport.domain.EvmAnchorEvidence;
 
 public final class EvmProofAnchorAdapter implements ProofAnchorPort {
     private static final BigInteger MINIMUM_GAS_LIMIT = BigInteger.valueOf(100_000L);
+    private static final BigInteger MAX_LOG_QUERY_BLOCK_COUNT = BigInteger.TEN;
     private static final String DUPLICATE_COMMITMENT_SELECTOR = Hash.sha3String(
             "CommitmentAlreadyAnchored(bytes32)"
     ).substring(0, 10).toLowerCase(Locale.ROOT);
@@ -391,27 +393,55 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
         }
     }
 
-    private Optional<String> findAnchorTransaction(byte[] commitment) {
+    Optional<String> findAnchorTransaction(byte[] commitment) {
+        try {
+            BigInteger deploymentBlock = properties.deploymentBlock();
+            BigInteger toBlock = web3j.ethBlockNumber().send().getBlockNumber();
+            while (toBlock.compareTo(deploymentBlock) >= 0) {
+                BigInteger fromBlock = toBlock
+                        .subtract(MAX_LOG_QUERY_BLOCK_COUNT.subtract(BigInteger.ONE))
+                        .max(deploymentBlock);
+                Optional<String> transactionHash = findAnchorTransaction(
+                        commitment,
+                        fromBlock,
+                        toBlock
+                );
+                if (transactionHash.isPresent()) {
+                    return transactionHash;
+                }
+                toBlock = fromBlock.subtract(BigInteger.ONE);
+            }
+            return Optional.empty();
+        } catch (IOException | ClientConnectionException exception) {
+            throw retryable("RPC_UNAVAILABLE");
+        }
+    }
+
+    private Optional<String> findAnchorTransaction(
+            byte[] commitment,
+            BigInteger fromBlock,
+            BigInteger toBlock
+    ) throws IOException {
         EthFilter filter = new EthFilter(
-                new DefaultBlockParameterNumber(properties.deploymentBlock()),
-                DefaultBlockParameterName.LATEST,
+                new DefaultBlockParameterNumber(fromBlock),
+                new DefaultBlockParameterNumber(toBlock),
                 properties.contractAddress()
         );
         filter.addSingleTopic(EventEncoder.encode(ANCHORED_EVENT));
         filter.addSingleTopic(Numeric.toHexString(commitment));
-        try {
-            List<EthLog.LogResult<?>> logs = web3j.ethGetLogs(filter).send().getLogs();
-            if (logs.isEmpty()) {
-                return Optional.empty();
-            }
-            Object value = logs.get(0).get();
-            if (!(value instanceof EthLog.LogObject log)) {
-                throw permanent("ANCHOR_EVENT_INVALID");
-            }
-            return Optional.ofNullable(log.getTransactionHash());
-        } catch (IOException exception) {
+        EthLog response = web3j.ethGetLogs(filter).send();
+        if (response.hasError()) {
             throw retryable("RPC_UNAVAILABLE");
         }
+        List<EthLog.LogResult<?>> logs = response.getLogs();
+        if (logs == null || logs.isEmpty()) {
+            return Optional.empty();
+        }
+        Object value = logs.get(0).get();
+        if (!(value instanceof EthLog.LogObject log)) {
+            throw permanent("ANCHOR_EVENT_INVALID");
+        }
+        return Optional.ofNullable(log.getTransactionHash());
     }
 
     private byte[] decodeCommitment(String commitment) {
