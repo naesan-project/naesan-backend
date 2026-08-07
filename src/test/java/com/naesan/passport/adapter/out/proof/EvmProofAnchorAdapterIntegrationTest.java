@@ -497,8 +497,8 @@ class EvmProofAnchorAdapterIntegrationTest {
                 address,
                 CHAIN.deploymentBlock(),
                 confirmations,
-                3,
-                Duration.ZERO
+                12,
+                Duration.ofMillis(100)
         );
     }
 
