@@ -41,7 +41,9 @@ out/
 .vscode/
 
 ### Local project records ###
-/docs/
+/docs/*
+!/docs/case-studies/
+!/docs/case-studies/*.md
 /archive/
 /DESIGN.md
 /.omx/
