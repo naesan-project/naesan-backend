@@ -19,6 +19,7 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.http.HttpService;
 
 import com.naesan.passport.application.port.out.ProofAnchorPort;
+import com.naesan.passport.application.port.out.ProofProviderTelemetry;
 
 @Configuration(proxyBeanMethods = false)
 public class ProofAdapterConfiguration {
@@ -117,9 +118,14 @@ public class ProofAdapterConfiguration {
     @ConditionalOnProperty(name = "naesan.proof.provider", havingValue = "evm")
     EvmProofHealthIndicator evmProofProviderHealthIndicator(
             EvmProofAnchorAdapter evmProofAnchorAdapter,
-            Clock clock
+            Clock clock,
+            ProofProviderTelemetry telemetry
     ) {
-        return new EvmProofHealthIndicator(evmProofAnchorAdapter, clock);
+        return new EvmProofHealthIndicator(
+                evmProofAnchorAdapter,
+                clock,
+                telemetry
+        );
     }
 
     @Bean(

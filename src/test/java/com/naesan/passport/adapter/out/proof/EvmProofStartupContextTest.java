@@ -9,7 +9,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import com.naesan.passport.adapter.out.observability.MicrometerProofProviderTelemetry;
 import com.naesan.passport.application.port.out.ProofAnchorPort;
+import com.naesan.passport.application.port.out.ProofProviderTelemetry;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class EvmProofStartupContextTest {
     private static final String CONTRACT_ADDRESS =
@@ -26,6 +30,12 @@ class EvmProofStartupContextTest {
                                 ApplicationConversionService.getSharedInstance()
                         ))
                 .withBean(Clock.class, Clock::systemUTC)
+                .withBean(
+                        ProofProviderTelemetry.class,
+                        () -> new MicrometerProofProviderTelemetry(
+                                new SimpleMeterRegistry()
+                        )
+                )
                 .withPropertyValues(
                         "naesan.proof.provider=evm",
                         "naesan.proof.evm.rpc-url=http://127.0.0.1:1",

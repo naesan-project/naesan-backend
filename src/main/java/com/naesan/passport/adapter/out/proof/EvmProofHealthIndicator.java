@@ -1,6 +1,7 @@
 package com.naesan.passport.adapter.out.proof;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -13,6 +14,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderException;
+import com.naesan.passport.application.port.out.ProofProviderTelemetry;
+import com.naesan.passport.application.port.out.ProofProviderTelemetry.ProbeStatus;
 
 public final class EvmProofHealthIndicator implements HealthIndicator {
     static final String SCHEDULER_BEAN_NAME = "evmProofHealthScheduler";
@@ -20,21 +23,29 @@ public final class EvmProofHealthIndicator implements HealthIndicator {
     private static final String NOT_CHECKED = "NOT_CHECKED";
     private static final Logger LOGGER =
             LoggerFactory.getLogger(EvmProofHealthIndicator.class);
-
     private final Runnable verifyConfiguration;
     private final Clock clock;
+    private final ProofProviderTelemetry telemetry;
     private final AtomicReference<ProbeResult> latestResult;
+    private final AtomicReference<Instant> outageStartedAt =
+            new AtomicReference<>();
 
     public EvmProofHealthIndicator(
             EvmProofAnchorAdapter adapter,
-            Clock clock
+            Clock clock,
+            ProofProviderTelemetry telemetry
     ) {
-        this(adapter::verifyConfiguration, clock);
+        this(adapter::verifyConfiguration, clock, telemetry);
     }
 
-    EvmProofHealthIndicator(Runnable verifyConfiguration, Clock clock) {
+    EvmProofHealthIndicator(
+            Runnable verifyConfiguration,
+            Clock clock,
+            ProofProviderTelemetry telemetry
+    ) {
         this.verifyConfiguration = Objects.requireNonNull(verifyConfiguration);
         this.clock = Objects.requireNonNull(clock);
+        this.telemetry = Objects.requireNonNull(telemetry);
         latestResult = new AtomicReference<>(ProbeResult.notChecked(clock.instant()));
     }
 
@@ -44,9 +55,34 @@ public final class EvmProofHealthIndicator implements HealthIndicator {
             scheduler = SCHEDULER_BEAN_NAME
     )
     public void refresh() {
+        long startedAt = System.nanoTime();
         ProbeResult nextResult = probe();
+        telemetry.recordProbe(
+                nextResult.probeStatus(),
+                Duration.ofNanos(System.nanoTime() - startedAt)
+        );
         ProbeResult previousResult = latestResult.getAndSet(nextResult);
+        recordOutageTransition(previousResult, nextResult);
         logTransition(previousResult, nextResult);
+    }
+
+    private void recordOutageTransition(
+            ProbeResult previous,
+            ProbeResult current
+    ) {
+        if (current.unavailable() && !previous.unavailable()) {
+            outageStartedAt.compareAndSet(null, current.checkedAt());
+            return;
+        }
+        if (!current.unavailable() && previous.unavailable()) {
+            Instant startedAt = outageStartedAt.getAndSet(null);
+            if (startedAt != null) {
+                telemetry.recordRecovery(Duration.between(
+                        startedAt,
+                        current.checkedAt()
+                ));
+            }
+        }
     }
 
     private ProbeResult probe() {
@@ -148,6 +184,23 @@ public final class EvmProofHealthIndicator implements HealthIndicator {
             return availability == other.availability
                     && failureType == other.failureType
                     && Objects.equals(errorCode, other.errorCode);
+        }
+
+        private boolean unavailable() {
+            return availability == Availability.TEMPORARILY_UNAVAILABLE
+                    || availability == Availability.MISCONFIGURED;
+        }
+
+        private ProbeStatus probeStatus() {
+            return switch (availability) {
+                case AVAILABLE -> ProbeStatus.AVAILABLE;
+                case TEMPORARILY_UNAVAILABLE ->
+                        ProbeStatus.TEMPORARILY_UNAVAILABLE;
+                case MISCONFIGURED -> ProbeStatus.MISCONFIGURED;
+                case NOT_CHECKED -> throw new IllegalStateException(
+                        "실행되지 않은 proof provider probe는 기록할 수 없습니다."
+                );
+            };
         }
     }
 }
