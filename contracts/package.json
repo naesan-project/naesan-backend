@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "node": "hardhat node",
     "deploy:local": "hardhat run scripts/deploy-local.ts --network localhost",
-    "deploy:testnet": "hardhat run scripts/deploy-testnet.ts --build-profile production --network sepolia"
+    "deploy:testnet": "hardhat run scripts/deploy-testnet.ts --build-profile production --network sepolia",
+    "measure:gas:local": "hardhat run scripts/measure-local-gas.ts --build-profile production --network localhost"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-network-helpers": "^3.0.11",
