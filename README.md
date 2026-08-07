@@ -137,7 +137,11 @@ EVM adapter는 다음 상태를 구분합니다.
 | 이전 | `/api/passports/{passportId}/transfers`, `/api/transfers/*` |
 | 운영 | `/health`, `/ready`, management port의 `/actuator/prometheus` |
 
-정확한 요청·응답 계약은 Controller, request/response DTO와 API integration test를 기준으로 관리합니다.
+정확한 요청·응답 계약은 Controller, request/response DTO와 API integration test를 기준으로 관리하며 실행 중인 서버에서 다음 문서를 확인할 수 있습니다.
+
+- Swagger UI: `/swagger-ui/index.html`
+- OpenAPI JSON: `/v3/api-docs`
+- OpenAPI YAML: `/v3/api-docs.yaml`
 
 ## 전체 애플리케이션 실행
 
