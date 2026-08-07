@@ -1,6 +1,9 @@
 package com.naesan.passport.adapter.in;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -18,20 +21,25 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.health.contributor.Status;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 
 import com.naesan.TestcontainersConfiguration;
 import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
 import com.naesan.passport.application.port.out.ProofAnchorPort;
+import com.naesan.passport.adapter.out.proof.EvmProofHealthIndicator;
 import com.naesan.passport.support.AnvilProofChain;
 import com.naesan.passport.support.FaultInjectingJsonRpcProxy;
 
 @Tag("evm")
 @SpringBootTest
+@AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class EvmProofOutboxIntegrationTest {
     private static final UUID OWNER_ACCOUNT_ID =
@@ -56,19 +64,25 @@ class EvmProofOutboxIntegrationTest {
     private final IssuePassportService issuePassportService;
     private final ProcessProofOutboxService processProofOutboxService;
     private final ProofAnchorPort proofAnchorPort;
+    private final EvmProofHealthIndicator healthIndicator;
     private final JdbcTemplate jdbcTemplate;
+    private final MockMvc mockMvc;
 
     @Autowired
     EvmProofOutboxIntegrationTest(
             IssuePassportService issuePassportService,
             ProcessProofOutboxService processProofOutboxService,
             ProofAnchorPort proofAnchorPort,
-            JdbcTemplate jdbcTemplate
+            EvmProofHealthIndicator healthIndicator,
+            JdbcTemplate jdbcTemplate,
+            MockMvc mockMvc
     ) {
         this.issuePassportService = issuePassportService;
         this.processProofOutboxService = processProofOutboxService;
         this.proofAnchorPort = proofAnchorPort;
+        this.healthIndicator = healthIndicator;
         this.jdbcTemplate = jdbcTemplate;
+        this.mockMvc = mockMvc;
     }
 
     @DynamicPropertySource
@@ -86,6 +100,8 @@ class EvmProofOutboxIntegrationTest {
         registry.add("naesan.proof.evm.required-confirmations", () -> "1");
         registry.add("naesan.proof.evm.receipt-attempts", () -> "3");
         registry.add("naesan.proof.evm.receipt-poll-interval", () -> "0s");
+        registry.add("naesan.proof.evm.health.initial-delay", () -> "1h");
+        registry.add("naesan.proof.evm.health.interval", () -> "1h");
     }
 
     @AfterAll
@@ -97,6 +113,7 @@ class EvmProofOutboxIntegrationTest {
     @BeforeEach
     void prepareIssuedPassport() {
         PROXY.forwardRawTransactionResponses();
+        healthIndicator.refresh();
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
         jdbcTemplate.update("DELETE FROM ownership_history");
@@ -234,13 +251,15 @@ class EvmProofOutboxIntegrationTest {
     }
 
     @Test
-    @DisplayName("RPC rate limit은 Worker를 종료하지 않고 Outbox 재시도로 전환한다")
-    void schedulesRetryAfterRpcRateLimit() {
+    @DisplayName("RPC rate limit 이후 다음 Worker 실행에서 Outbox를 자동 복구한다")
+    void recoversOutboxAfterRpcRateLimit() {
         PROXY.failNextResponses("eth_chainId", 429, 1);
 
-        boolean processed = processProofOutboxService.processNext("evm-worker-rate-limit");
+        boolean failedAttempt = processProofOutboxService.processNext(
+                "evm-worker-rate-limit"
+        );
 
-        assertThat(processed).isTrue();
+        assertThat(failedAttempt).isTrue();
         assertThat(jdbcTemplate.queryForMap("""
                 SELECT status, error_category, error_code
                 FROM outbox_events
@@ -252,5 +271,51 @@ class EvmProofOutboxIntegrationTest {
                 "SELECT state FROM proof_anchors",
                 String.class
         )).isEqualTo("PREPARED");
+
+        jdbcTemplate.update("""
+                UPDATE outbox_events
+                SET next_attempt_at = CURRENT_TIMESTAMP
+                """);
+        boolean recoveredAttempt = processProofOutboxService.processNext(
+                "evm-worker-recovered"
+        );
+
+        assertThat(recoveredAttempt).isTrue();
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT status, attempt_count, error_category, error_code
+                FROM outbox_events
+                """))
+                .containsEntry("status", "SUCCEEDED")
+                .containsEntry("attempt_count", 2)
+                .containsEntry("error_category", "RETRYABLE")
+                .containsEntry("error_code", "RPC_UNAVAILABLE");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT state FROM proof_anchors",
+                String.class
+        )).isEqualTo("CONFIRMED");
+    }
+
+    @Test
+    @DisplayName("RPC 장애 중 liveness를 유지하고 복구 후 readiness를 자동 회복한다")
+    void separatesLivenessAndRecoversReadiness() throws Exception {
+        PROXY.failNextResponses("eth_chainId", 503, 1);
+
+        healthIndicator.refresh();
+
+        assertThat(healthIndicator.health().getStatus()).isEqualTo(Status.DOWN);
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.status").value("DOWN"))
+                .andExpect(jsonPath("$.errorCode").doesNotExist());
+
+        healthIndicator.refresh();
+
+        assertThat(healthIndicator.health().getStatus()).isEqualTo(Status.UP);
+        mockMvc.perform(get("/ready"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
     }
 }
