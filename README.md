@@ -103,8 +103,9 @@ sequenceDiagram
 
 EVM adapter는 다음 상태를 구분합니다.
 
-- nonce, gas, estimate 단계의 RPC 실패
+- HTTP 429·503·timeout을 포함한 RPC 일시 장애
 - 전송 후 결과를 확정할 수 없는 ambiguous 상태
+- 동일 writer의 nonce 경쟁과 안전한 retry
 - 동일 commitment의 중복 anchor 경쟁
 - receipt 대기와 confirmation 부족
 - chain read-back 불일치
@@ -193,6 +194,10 @@ npm run typecheck
 npm test
 npm run build
 
+# production compiler 기준 배포·anchor gas 측정
+# 별도 terminal에서 npm run node 실행 후
+npm run measure:gas:local
+
 # Java ↔ 로컬 EVM 통합 테스트
 cd ..
 ./gradlew evmTest --no-daemon
@@ -208,13 +213,17 @@ cd ..
 bash operations/verify-local-compose.sh
 ```
 
-현재 기본 Spring test suite는 376개 테스트를 포함합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 프론트엔드까지 포함한 전체 Compose browser smoke를 추가로 선택할 수 있습니다.
+현재 기본 Spring test suite는 379개, 로컬 EVM suite는 24개 테스트를 포함합니다. EVM suite는 실제 signed transaction 응답 유실, writer nonce 경쟁 100회, RPC 429·503·timeout과 chain reorganization을 Anvil에서 재현합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 프론트엔드까지 포함한 전체 Compose browser smoke를 추가로 선택할 수 있습니다.
 
 ## 스마트 컨트랙트 배포
 
 로컬 체인과 Sepolia 배포 명령, writer 분리와 필요한 환경변수는 [contracts/README.md](contracts/README.md)를 참고하세요.
 
 Sepolia 배포 스크립트는 production compiler profile을 사용하고 대상 chain을 검증합니다. 개인 지갑 키를 backend writer 또는 deployer 키로 재사용하지 마세요.
+
+- Sepolia contract: [`0x6950fe11e668c92757f09c7a4842070e5343db9f`](https://sepolia.etherscan.io/address/0x6950fe11e668c92757f09c7a4842070e5343db9f)
+- 확인 transaction: [`0x4a1fd340fd8361357c639b1fa3c854ded9cb8c41fdf3c816546534b76027c6a0`](https://sepolia.etherscan.io/tx/0x4a1fd340fd8361357c639b1fa3c854ded9cb8c41fdf3c816546534b76027c6a0)
+- anchor gas used: `45,663`
 
 ## 운영 특성
 
@@ -228,11 +237,13 @@ Sepolia 배포 스크립트는 production compiler profile을 사용하고 대�
 
 ## 현재 한계
 
-- 공개 클라우드 운영 환경과 도메인은 아직 구성하지 않았습니다.
-- Sepolia 실제 컨트랙트 주소와 트랜잭션 증거가 없습니다.
+- 무료 hosting과 RPC는 cold start, quota, 로그 조회 범위와 가용성 제한이 있습니다.
+- Sepolia는 2 confirmations로 빠른 시연을 우선하며 `CONFIRMED` 이후 reorg 자동 재검증은 아직 없습니다.
+- 단일 EVM writer는 nonce 직렬화 지점이며 동시 제출 충돌은 retry로 복구합니다.
+- Ethereum Mainnet에는 배포하지 않았으며 gas 비용은 실측 사용량 기반 시나리오로만 평가했습니다.
 - 외부 정품 판정 기관과 연동하지 않습니다.
 - 제품 대표 이미지와 브랜드·모델 등 일부 표시용 정보는 패스 응답에 영속화되지 않습니다.
-- 중앙 로그 수집, 알림, 백업과 자동 배포가 필요합니다.
+- 장기 중앙 로그 보존, 자동 backup과 Web3 장애 알림 고도화가 필요합니다.
 
 ## 라이선스
 
