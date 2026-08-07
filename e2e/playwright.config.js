@@ -5,6 +5,7 @@ const FRONTEND_URL = 'http://localhost:5173';
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: 'ui-local.spec.js',
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,

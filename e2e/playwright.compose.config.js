@@ -4,7 +4,7 @@ const BASE_URL = process.env.NAESAN_E2E_BASE_URL ?? 'http://localhost:18081';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'core-local.spec.js',
+  testMatch: ['core-local.spec.js', 'ui-local.spec.js'],
   fullyParallel: false,
   workers: 1,
   timeout: 120_000,
