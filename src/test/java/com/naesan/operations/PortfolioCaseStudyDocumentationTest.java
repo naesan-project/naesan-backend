@@ -49,7 +49,7 @@ class PortfolioCaseStudyDocumentationTest {
 
         assertThat(repositoryReadme)
                 .contains("docs/case-studies/README.md")
-                .contains("Spring test suite는 390개")
+                .contains("Spring test suite는 391개")
                 .contains("EVM suite는 25개");
         assertThat(caseStudyReadme)
                 .contains(CASE_STUDIES.toArray(String[]::new))
