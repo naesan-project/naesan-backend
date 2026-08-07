@@ -11,12 +11,31 @@ const RECEIPT_PATH = path.resolve(
     'src/assets/evidence/purchase-record.png',
 );
 const PASSWORD = 'correct horse battery staple';
+const PROOF_TIMEOUT_MS = Number.parseInt(
+    process.env.NAESAN_E2E_PROOF_TIMEOUT_MS ?? '30000',
+    10,
+);
+const READY_TIMEOUT_MS = Number.parseInt(
+    process.env.NAESAN_E2E_READY_TIMEOUT_MS ?? '10000',
+    10,
+);
 
 test('React UI에서 가입부터 패스 공유 폐기까지 완료한다', async ({
   context,
   page,
 }) => {
   const email = `ui-smoke-${crypto.randomUUID()}@example.com`;
+
+  await expect.poll(async () => {
+    try {
+      return (await page.request.get('/ready')).status();
+    } catch {
+      return 0;
+    }
+  }, {
+    intervals: [1_000, 3_000, 5_000, 10_000],
+    timeout: READY_TIMEOUT_MS,
+  }).toBe(200);
 
   await page.goto('/signup');
   await page.getByLabel('이메일').fill(email);
@@ -74,7 +93,7 @@ test('React UI에서 가입부터 패스 공유 폐기까지 완료한다', asyn
     }).getByRole('strong').textContent();
   }, {
     intervals: [1_000, 2_000, 3_000],
-    timeout: 30_000,
+    timeout: PROOF_TIMEOUT_MS,
   }).toBe('외부 검증 완료');
 
   await page.getByRole('button', {name: '공유 링크 만들기'}).click();

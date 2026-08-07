@@ -7,7 +7,8 @@
     "test": "playwright test",
     "test:compose": "playwright test --config playwright.compose.config.js",
     "test:core": "playwright test tests/core-local.spec.js",
-    "test:transfer": "playwright test tests/transfer.spec.js"
+    "test:transfer": "playwright test tests/transfer.spec.js",
+    "record:demo": "playwright test tests/ui-local.spec.js --config playwright.demo.config.js"
   },
   "devDependencies": {
     "@playwright/test": "1.62.0"
