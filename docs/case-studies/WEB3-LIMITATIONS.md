@@ -67,6 +67,7 @@ DB fencing은 동일 Outbox event의 중복 처리를 막지만 서로 다른 ev
 ## 검증 환경
 
 - Local: Anvil, production compiler 설정, signed transaction과 PostgreSQL 통합
+- Browser integration: production Docker Compose, 실제 React UI의 구매 증빙 파일 업로드·발급·공유 폐기 ([CI evidence](https://github.com/naesan-project/naesan-backend/actions/runs/31149499940))
 - Public testnet: Sepolia contract와 실제 anchor
 - Hosting: Render Free와 Supabase Free
 - Mainnet: 배포하지 않음

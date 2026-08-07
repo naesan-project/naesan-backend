@@ -210,12 +210,12 @@ npm ci
 npm run install:browser
 npm test
 
-# 깨끗한 임시 Compose에서 가입→발급→공유→이전 smoke
+# 깨끗한 임시 Compose에서 API 흐름과 실제 React UI smoke
 cd ..
 bash operations/verify-local-compose.sh
 ```
 
-현재 기본 Spring test suite는 390개, 로컬 EVM suite는 25개 테스트를 포함합니다. EVM suite는 실제 signed transaction 응답 유실, writer nonce 경쟁 100회, RPC 429·503·timeout과 chain reorganization을 Anvil에서 재현합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 프론트엔드까지 포함한 전체 Compose browser smoke를 추가로 선택할 수 있습니다.
+현재 기본 Spring test suite는 390개, 로컬 EVM suite는 25개 테스트를 포함합니다. EVM suite는 실제 signed transaction 응답 유실, writer nonce 경쟁 100회, RPC 429·503·timeout과 chain reorganization을 Anvil에서 재현합니다. GitHub Actions는 contract 검증, Spring 테스트, 로컬 EVM 통합 테스트, local Compose 설정과 production Docker 이미지 빌드를 검증합니다. 수동 실행에서는 API 중심 핵심 흐름과 실제 React UI의 사진 촬영·구매 증빙 파일 업로드·발급·공유 폐기를 production Compose에서 함께 검증합니다.
 
 ## 스마트 컨트랙트 배포
 
