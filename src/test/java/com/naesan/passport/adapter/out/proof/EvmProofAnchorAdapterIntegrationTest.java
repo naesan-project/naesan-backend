@@ -17,6 +17,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.web3j.abi.EventEncoder;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Event;
@@ -28,6 +30,8 @@ import org.web3j.protocol.core.DefaultBlockParameterName;
 import org.web3j.protocol.core.DefaultBlockParameterNumber;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.http.HttpService;
+
+import okhttp3.OkHttpClient;
 
 import com.naesan.passport.application.port.out.ProofAnchorCommand;
 import com.naesan.passport.application.port.out.ProofFailureType;
@@ -272,6 +276,131 @@ class EvmProofAnchorAdapterIntegrationTest {
                 workers.shutdownNow();
                 firstWeb3j.shutdown();
                 secondWeb3j.shutdown();
+            }
+        }
+    }
+
+    @ParameterizedTest(name = "HTTP {0}")
+    @ValueSource(ints = {429, 503})
+    @DisplayName("RPC의 일시적인 HTTP 실패는 안전한 재시도 오류로 변환한다")
+    void classifiesTransientRpcHttpFailureAsRetryable(int statusCode) {
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            proxy.failNextResponses("eth_chainId", statusCode, 1);
+            Web3j proxiedWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            EvmProofAnchorAdapter adapter = adapter(
+                    proxiedWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            try {
+                assertThatThrownBy(() -> adapter.submit(command(commitment(statusCode))))
+                        .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                            assertThat(failure.failureType())
+                                    .isEqualTo(ProofFailureType.RETRYABLE);
+                            assertThat(failure.errorCode()).isEqualTo("RPC_UNAVAILABLE");
+                        });
+            } finally {
+                proxiedWeb3j.shutdown();
+            }
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            "eth_chainId",
+            "eth_getCode",
+            "eth_call",
+            "eth_getTransactionCount",
+            "eth_gasPrice",
+            "eth_estimateGas",
+            "eth_sendRawTransaction"
+    })
+    @DisplayName("제출 단계별 HTTP 실패는 Worker가 처리할 수 있는 RPC 오류다")
+    void classifiesHttpFailureAcrossSubmissionStages(String method) {
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            proxy.failNextResponses(method, 503, 1);
+            Web3j proxiedWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            EvmProofAnchorAdapter adapter = adapter(
+                    proxiedWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            try {
+                assertThatThrownBy(() -> adapter.submit(command(
+                        commitment(Math.abs(method.hashCode()))
+                )))
+                        .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                            assertThat(failure.failureType())
+                                    .isEqualTo(ProofFailureType.RETRYABLE);
+                            assertThat(failure.errorCode()).isEqualTo("RPC_UNAVAILABLE");
+                        });
+            } finally {
+                proxiedWeb3j.shutdown();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("receipt 조회 HTTP 실패 뒤에는 기존 transaction을 lookup으로 복구한다")
+    void recoversTransactionAfterReceiptHttpFailure() {
+        String commitment = commitment(50_000);
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            proxy.failNextResponses("eth_getTransactionReceipt", 503, 1);
+            Web3j proxiedWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            EvmProofAnchorAdapter adapter = adapter(
+                    proxiedWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            try {
+                assertThatThrownBy(() -> adapter.submit(command(commitment)))
+                        .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                            assertThat(failure.failureType())
+                                    .isEqualTo(ProofFailureType.RETRYABLE);
+                            assertThat(failure.errorCode()).isEqualTo("RPC_UNAVAILABLE");
+                        });
+
+                assertThat(adapter.lookup(commitment)).isPresent();
+                assertThat(anchorEventCount(commitment)).isEqualTo(1);
+            } finally {
+                proxiedWeb3j.shutdown();
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("RPC timeout은 Worker가 처리할 수 있는 재시도 오류다")
+    void classifiesRpcTimeoutAsRetryable() {
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            proxy.delayNextResponses("eth_chainId", Duration.ofMillis(500), 1);
+            OkHttpClient client = HttpService.getOkHttpClientBuilder()
+                    .readTimeout(Duration.ofMillis(100))
+                    .build();
+            Web3j proxiedWeb3j = Web3j.build(
+                    new HttpService(proxy.rpcUrl().toString(), client)
+            );
+            EvmProofAnchorAdapter adapter = adapter(
+                    proxiedWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            try {
+                assertThatThrownBy(() -> adapter.submit(command(commitment(60_000))))
+                        .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                            assertThat(failure.failureType())
+                                    .isEqualTo(ProofFailureType.RETRYABLE);
+                            assertThat(failure.errorCode()).isEqualTo("RPC_UNAVAILABLE");
+                        });
+            } finally {
+                proxiedWeb3j.shutdown();
             }
         }
     }

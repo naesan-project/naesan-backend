@@ -9,6 +9,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,11 +24,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
-    private static final Pattern SEND_RAW_TRANSACTION = Pattern.compile(
-            "\\\"method\\\"\\s*:\\s*\\\"eth_sendRawTransaction\\\""
-    );
-    private static final Pattern GET_TRANSACTION_COUNT = Pattern.compile(
-            "\\\"method\\\"\\s*:\\s*\\\"eth_getTransactionCount\\\""
+    private static final Pattern JSON_RPC_METHOD = Pattern.compile(
+            "\\\"method\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
     );
 
     private final URI upstream;
@@ -37,6 +36,9 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
     private final AtomicInteger forwardedRawTransactions = new AtomicInteger();
     private final AtomicReference<CountDownLatch> transactionCountResponses =
             new AtomicReference<>();
+    private final Map<String, InjectedHttpFailure> injectedHttpFailures =
+            new ConcurrentHashMap<>();
+    private final Map<String, InjectedDelay> injectedDelays = new ConcurrentHashMap<>();
 
     public FaultInjectingJsonRpcProxy(URI upstream) {
         this.upstream = upstream;
@@ -87,6 +89,26 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
         }
     }
 
+    public void failNextResponses(String method, int statusCode, int count) {
+        if (method == null || method.isBlank()) {
+            throw new IllegalArgumentException("실패시킬 JSON-RPC method가 필요합니다.");
+        }
+        if (statusCode < 400 || statusCode > 599 || count < 1) {
+            throw new IllegalArgumentException("HTTP 실패 상태와 횟수가 유효하지 않습니다.");
+        }
+        injectedHttpFailures.put(method, new InjectedHttpFailure(statusCode, count));
+    }
+
+    public void delayNextResponses(String method, Duration delay, int count) {
+        if (method == null || method.isBlank()) {
+            throw new IllegalArgumentException("지연할 JSON-RPC method가 필요합니다.");
+        }
+        if (delay == null || delay.isZero() || delay.isNegative() || count < 1) {
+            throw new IllegalArgumentException("응답 지연 시간과 횟수가 유효하지 않습니다.");
+        }
+        injectedDelays.put(method, new InjectedDelay(delay, count));
+    }
+
     @Override
     public void close() {
         server.stop(0);
@@ -96,10 +118,21 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
     private void forward(HttpExchange exchange) throws IOException {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
         String requestJson = new String(requestBody, StandardCharsets.UTF_8);
-        boolean rawTransaction = SEND_RAW_TRANSACTION.matcher(requestJson).find();
-        boolean transactionCount = GET_TRANSACTION_COUNT.matcher(requestJson).find();
+        var methodMatcher = JSON_RPC_METHOD.matcher(requestJson);
+        String method = methodMatcher.find() ? methodMatcher.group(1) : "";
+        boolean rawTransaction = "eth_sendRawTransaction".equals(method);
+        boolean transactionCount = "eth_getTransactionCount".equals(method);
         if (rawTransaction) {
             forwardedRawTransactions.incrementAndGet();
+        }
+        InjectedDelay injectedDelay = injectedDelays.get(method);
+        if (injectedDelay != null && injectedDelay.consume()) {
+            pause(injectedDelay.delay());
+        }
+        InjectedHttpFailure injectedFailure = injectedHttpFailures.get(method);
+        if (injectedFailure != null && injectedFailure.consume()) {
+            writeInjectedFailure(exchange, injectedFailure.statusCode());
+            return;
         }
 
         try {
@@ -122,6 +155,15 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
             Thread.currentThread().interrupt();
             exchange.sendResponseHeaders(503, -1);
             exchange.close();
+        }
+    }
+
+    private static void pause(Duration delay) throws IOException {
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("JSON-RPC 응답 지연이 중단되었습니다.", exception);
         }
     }
 
@@ -154,6 +196,16 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
         exchange.close();
     }
 
+    private static void writeInjectedFailure(HttpExchange exchange, int statusCode)
+            throws IOException {
+        byte[] body = "{\"error\":\"injected JSON-RPC HTTP failure\"}"
+                .getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(statusCode, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
     private static void writeResponse(
             HttpExchange exchange,
             HttpResponse<byte[]> upstreamResponse
@@ -163,5 +215,55 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
         exchange.sendResponseHeaders(upstreamResponse.statusCode(), body.length);
         exchange.getResponseBody().write(body);
         exchange.close();
+    }
+
+    private static final class InjectedHttpFailure {
+        private final int statusCode;
+        private final AtomicInteger remaining;
+
+        private InjectedHttpFailure(int statusCode, int count) {
+            this.statusCode = statusCode;
+            remaining = new AtomicInteger(count);
+        }
+
+        int statusCode() {
+            return statusCode;
+        }
+
+        boolean consume() {
+            int current;
+            do {
+                current = remaining.get();
+                if (current == 0) {
+                    return false;
+                }
+            } while (!remaining.compareAndSet(current, current - 1));
+            return true;
+        }
+    }
+
+    private static final class InjectedDelay {
+        private final Duration delay;
+        private final AtomicInteger remaining;
+
+        private InjectedDelay(Duration delay, int count) {
+            this.delay = delay;
+            remaining = new AtomicInteger(count);
+        }
+
+        Duration delay() {
+            return delay;
+        }
+
+        boolean consume() {
+            int current;
+            do {
+                current = remaining.get();
+                if (current == 0) {
+                    return false;
+                }
+            } while (!remaining.compareAndSet(current, current - 1));
+            return true;
+        }
     }
 }

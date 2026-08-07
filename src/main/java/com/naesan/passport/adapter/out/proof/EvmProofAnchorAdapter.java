@@ -99,7 +99,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 throw permanent("CONTRACT_NOT_FOUND");
             }
             verifyWriter();
-        } catch (IOException exception) {
+        } catch (IOException | ClientConnectionException exception) {
             throw retryable("RPC_UNAVAILABLE");
         }
     }
@@ -196,13 +196,15 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                     properties.chainId().longValueExact(),
                     credentials
             );
-        } catch (IOException exception) {
+        } catch (IOException | ClientConnectionException exception) {
             throw retryable("RPC_UNAVAILABLE");
         }
 
         EthSendTransaction response;
         try {
             response = web3j.ethSendRawTransaction(Numeric.toHexString(signed)).send();
+        } catch (ClientConnectionException exception) {
+            throw retryable("RPC_UNAVAILABLE");
         } catch (IOException exception) {
             throw ambiguous("SUBMIT_RESULT_UNKNOWN");
         }
@@ -254,7 +256,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                     ));
                 }
                 pause();
-            } catch (IOException exception) {
+            } catch (IOException | ClientConnectionException exception) {
                 throw retryable("RPC_UNAVAILABLE");
             }
         }
@@ -310,7 +312,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 throw retryable("BLOCK_NOT_FOUND");
             }
             return block;
-        } catch (IOException exception) {
+        } catch (IOException | ClientConnectionException exception) {
             throw retryable("RPC_UNAVAILABLE");
         }
     }
@@ -321,7 +323,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
             BigInteger count = head.subtract(anchoredBlock).add(BigInteger.ONE);
             return count.max(BigInteger.ZERO).min(BigInteger.valueOf(Integer.MAX_VALUE))
                     .intValueExact();
-        } catch (IOException exception) {
+        } catch (IOException | ClientConnectionException exception) {
             throw retryable("RPC_UNAVAILABLE");
         }
     }
@@ -357,7 +359,7 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                     exists,
                     Instant.ofEpochSecond(anchoredAt.longValueExact())
             );
-        } catch (IOException exception) {
+        } catch (IOException | ClientConnectionException exception) {
             throw retryable("RPC_UNAVAILABLE");
         } catch (ArithmeticException | ClassCastException exception) {
             throw permanent("CONTRACT_MISMATCH");

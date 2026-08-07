@@ -232,4 +232,25 @@ class EvmProofOutboxIntegrationTest {
         assertThat(proof.get("transaction_hash").toString()).startsWith("0x");
         assertThat(proof.get("block_hash").toString()).startsWith("0x");
     }
+
+    @Test
+    @DisplayName("RPC rate limit은 Worker를 종료하지 않고 Outbox 재시도로 전환한다")
+    void schedulesRetryAfterRpcRateLimit() {
+        PROXY.failNextResponses("eth_chainId", 429, 1);
+
+        boolean processed = processProofOutboxService.processNext("evm-worker-rate-limit");
+
+        assertThat(processed).isTrue();
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT status, error_category, error_code
+                FROM outbox_events
+                """))
+                .containsEntry("status", "RETRY_WAIT")
+                .containsEntry("error_category", "RETRYABLE")
+                .containsEntry("error_code", "RPC_UNAVAILABLE");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT state FROM proof_anchors",
+                String.class
+        )).isEqualTo("PREPARED");
+    }
 }
