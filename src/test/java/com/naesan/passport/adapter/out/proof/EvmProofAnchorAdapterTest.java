@@ -102,6 +102,18 @@ class EvmProofAnchorAdapterTest {
     }
 
     @Test
+    @DisplayName("writer nonce 경쟁으로 거부된 transaction은 구분 가능한 재시도 오류다")
+    void classifiesWriterNonceConflict() {
+        EvmProofAnchorAdapter adapter = adapter(mock(Web3j.class));
+        Response.Error error = new Response.Error(-32_003, "nonce too low");
+
+        ProofProviderException failure = adapter.classifySubmissionError(error);
+
+        assertThat(failure.failureType()).isEqualTo(ProofFailureType.RETRYABLE);
+        assertThat(failure.errorCode()).isEqualTo("NONCE_CONFLICT");
+    }
+
+    @Test
     @DisplayName("anchor 이벤트 조회는 최신 블록부터 10블록 단위로 나눈다")
     @SuppressWarnings({"rawtypes", "unchecked"})
     void looksUpAnchorEventInTenBlockChunks() throws IOException {

@@ -464,6 +464,11 @@ public final class EvmProofAnchorAdapter implements ProofAnchorPort {
                 || normalized.contains("unauthorized")) {
             return permanent("CONTRACT_REVERT");
         }
+        if (normalized.contains("nonce too low")
+                || normalized.contains("nonce has already been used")
+                || normalized.contains("replacement transaction underpriced")) {
+            return retryable("NONCE_CONFLICT");
+        }
         if (normalized.contains("insufficient funds")) {
             return permanent("INSUFFICIENT_FUNDS");
         }

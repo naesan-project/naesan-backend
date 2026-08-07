@@ -7,11 +7,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -21,6 +25,9 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
     private static final Pattern SEND_RAW_TRANSACTION = Pattern.compile(
             "\\\"method\\\"\\s*:\\s*\\\"eth_sendRawTransaction\\\""
     );
+    private static final Pattern GET_TRANSACTION_COUNT = Pattern.compile(
+            "\\\"method\\\"\\s*:\\s*\\\"eth_getTransactionCount\\\""
+    );
 
     private final URI upstream;
     private final HttpClient client;
@@ -28,6 +35,8 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
     private final ExecutorService executor;
     private final AtomicBoolean truncateRawTransactionResponses = new AtomicBoolean();
     private final AtomicInteger forwardedRawTransactions = new AtomicInteger();
+    private final AtomicReference<CountDownLatch> transactionCountResponses =
+            new AtomicReference<>();
 
     public FaultInjectingJsonRpcProxy(URI upstream) {
         this.upstream = upstream;
@@ -69,6 +78,15 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
         return forwardedRawTransactions.get();
     }
 
+    public void synchronizeNextTransactionCountResponses(int parties) {
+        if (parties < 2) {
+            throw new IllegalArgumentException("동기화할 nonce 응답은 두 개 이상이어야 합니다.");
+        }
+        if (!transactionCountResponses.compareAndSet(null, new CountDownLatch(parties))) {
+            throw new IllegalStateException("이미 nonce 응답 동기화가 진행 중입니다.");
+        }
+    }
+
     @Override
     public void close() {
         server.stop(0);
@@ -77,9 +95,9 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
 
     private void forward(HttpExchange exchange) throws IOException {
         byte[] requestBody = exchange.getRequestBody().readAllBytes();
-        boolean rawTransaction = SEND_RAW_TRANSACTION.matcher(
-                new String(requestBody, java.nio.charset.StandardCharsets.UTF_8)
-        ).find();
+        String requestJson = new String(requestBody, StandardCharsets.UTF_8);
+        boolean rawTransaction = SEND_RAW_TRANSACTION.matcher(requestJson).find();
+        boolean transactionCount = GET_TRANSACTION_COUNT.matcher(requestJson).find();
         if (rawTransaction) {
             forwardedRawTransactions.incrementAndGet();
         }
@@ -92,6 +110,9 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
                             .build(),
                     HttpResponse.BodyHandlers.ofByteArray()
             );
+            if (transactionCount) {
+                awaitSynchronizedTransactionCountResponses();
+            }
             if (rawTransaction && truncateRawTransactionResponses.get()) {
                 truncateResponse(exchange, upstreamResponse);
                 return;
@@ -101,6 +122,23 @@ public final class FaultInjectingJsonRpcProxy implements AutoCloseable {
             Thread.currentThread().interrupt();
             exchange.sendResponseHeaders(503, -1);
             exchange.close();
+        }
+    }
+
+    private void awaitSynchronizedTransactionCountResponses() throws IOException {
+        CountDownLatch barrier = transactionCountResponses.get();
+        if (barrier == null) {
+            return;
+        }
+        barrier.countDown();
+        try {
+            if (!barrier.await(5, TimeUnit.SECONDS)) {
+                throw new IOException("nonce 응답 동기화 시간이 초과되었습니다.");
+            }
+            transactionCountResponses.compareAndSet(barrier, null);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("nonce 응답 동기화가 중단되었습니다.", exception);
         }
     }
 

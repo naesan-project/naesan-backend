@@ -8,6 +8,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -208,6 +211,88 @@ class EvmProofAnchorAdapterIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("독립 worker의 nonce 경쟁을 100회 복구해 모든 기준점을 각각 확정한다")
+    void retriesConcurrentSubmissionsAfterWriterNonceRace() {
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            Web3j firstWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            Web3j secondWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            EvmProofAnchorAdapter firstAdapter = adapter(
+                    firstWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            EvmProofAnchorAdapter secondAdapter = adapter(
+                    secondWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            ExecutorService workers = Executors.newFixedThreadPool(2);
+            try {
+                for (int iteration = 0; iteration < 100; iteration++) {
+                    String firstCommitment = commitment(10_000 + iteration * 2);
+                    String secondCommitment = commitment(10_001 + iteration * 2);
+                    proxy.synchronizeNextTransactionCountResponses(2);
+                    var first = CompletableFuture.supplyAsync(
+                            () -> submit(firstAdapter, firstCommitment),
+                            workers
+                    );
+                    var second = CompletableFuture.supplyAsync(
+                            () -> submit(secondAdapter, secondCommitment),
+                            workers
+                    );
+                    List<SubmissionResult> initial = List.of(first.join(), second.join());
+
+                    assertThat(initial).filteredOn(SubmissionResult::succeeded).hasSize(1);
+                    assertThat(initial).filteredOn(result -> !result.succeeded())
+                            .singleElement()
+                            .satisfies(result -> {
+                                assertThat(result.failure().failureType())
+                                        .isEqualTo(ProofFailureType.RETRYABLE);
+                                assertThat(result.failure().errorCode())
+                                        .isEqualTo("NONCE_CONFLICT");
+                            });
+
+                    SubmissionResult failed = initial.stream()
+                            .filter(result -> !result.succeeded())
+                            .findFirst()
+                            .orElseThrow();
+                    EvmProofAnchorAdapter retryAdapter = failed.commitment()
+                            .equals(firstCommitment) ? firstAdapter : secondAdapter;
+                    var retried = retryAdapter.submit(command(failed.commitment()));
+
+                    assertThat(retried.confirmed()).isTrue();
+                    assertThat(anchorEventCount(firstCommitment)).isEqualTo(1);
+                    assertThat(anchorEventCount(secondCommitment)).isEqualTo(1);
+                }
+            } finally {
+                workers.shutdownNow();
+                firstWeb3j.shutdown();
+                secondWeb3j.shutdown();
+            }
+        }
+    }
+
+    private static SubmissionResult submit(
+            EvmProofAnchorAdapter adapter,
+            String commitment
+    ) {
+        try {
+            adapter.submit(command(commitment));
+            return new SubmissionResult(commitment, null);
+        } catch (ProofProviderException failure) {
+            return new SubmissionResult(commitment, failure);
+        }
+    }
+
+    private static String commitment(int value) {
+        String hex = Integer.toHexString(value);
+        return "0".repeat(64 - hex.length()) + hex;
+    }
+
     private static int anchorEventCount(String commitment) {
         Event anchored = new Event(
                 "CommitmentAnchored",
@@ -270,5 +355,15 @@ class EvmProofAnchorAdapterIntegrationTest {
 
     private static ProofAnchorCommand command(String commitment) {
         return new ProofAnchorCommand("proof-anchor:" + commitment, commitment);
+    }
+
+    private record SubmissionResult(
+            String commitment,
+            ProofProviderException failure
+    ) {
+
+        boolean succeeded() {
+            return failure == null;
+        }
     }
 }
