@@ -2,6 +2,8 @@
 
 [![Backend CI](https://github.com/naesan-project/naesan-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/naesan-project/naesan-backend/actions/workflows/ci.yml)
 
+[변경 이력](CHANGELOG.md) · [v0.1.0 릴리스 노트](.github/releases/v0.1.0.md)
+
 내산의 계정, 증빙, 패스, 공유, 이전과 EVM 기술적 기록을 담당하는 Spring Boot API입니다.
 
 - 프로젝트 전체 소개: [naesan-project](https://github.com/naesan-project)
