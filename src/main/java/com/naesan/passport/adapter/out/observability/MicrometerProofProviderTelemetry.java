@@ -6,6 +6,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.naesan.passport.application.port.out.ProofProviderTelemetry;
@@ -16,6 +17,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 
 @Component
+@ConditionalOnProperty(name = "naesan.proof.provider", havingValue = "evm")
 public class MicrometerProofProviderTelemetry implements ProofProviderTelemetry {
     private static final String RESULT_TAG = "result";
 

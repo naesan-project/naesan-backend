@@ -48,6 +48,36 @@
           "expr": "sum(jvm_memory_used_bytes{area=\"heap\"}) / sum(jvm_memory_max_bytes{area=\"heap\"})"
         }
       ]
+    },
+    {
+      "id": 5,
+      "title": "EVM proof provider availability",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "naesan_proof_provider_available"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "EVM proof provider average probe latency",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(naesan_proof_provider_probe_seconds_sum[5m])) / sum(rate(naesan_proof_provider_probe_seconds_count[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Longest recent EVM provider outage",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "naesan_proof_provider_outage_seconds_max"
+        }
+      ]
     }
   ]
 }

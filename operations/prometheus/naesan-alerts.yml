@@ -21,3 +21,10 @@ groups:
           severity: critical
         annotations:
           summary: Proof outbox fencing rejected a finalize operation
+      - alert: NaesanProofProviderUnavailable
+        expr: naesan_proof_provider_available == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: EVM proof provider has remained unavailable

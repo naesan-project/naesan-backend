@@ -18,7 +18,7 @@ class OperationsMonitoringAssetsTest {
     );
 
     @Test
-    @DisplayName("운영 dashboard는 outbox 상태와 처리량과 JVM 상태를 표시한다")
+    @DisplayName("운영 dashboard는 outbox와 EVM 공급자와 JVM 상태를 표시한다")
     void coversOperationalSignals() throws IOException {
         String dashboardContent = Files.readString(DASHBOARD_PATH);
 
@@ -28,9 +28,15 @@ class OperationsMonitoringAssetsTest {
                 .contains("\"id\": 2")
                 .contains("\"id\": 3")
                 .contains("\"id\": 4")
+                .contains("\"id\": 5")
+                .contains("\"id\": 6")
+                .contains("\"id\": 7")
                 .contains("naesan_proof_outbox_events")
                 .contains("naesan_proof_outbox_processed_total")
                 .contains("naesan_proof_outbox_finalize_rejected_total")
+                .contains("naesan_proof_provider_available")
+                .contains("naesan_proof_provider_probe_seconds")
+                .contains("naesan_proof_provider_outage_seconds_max")
                 .contains("jvm_memory_used_bytes")
                 .doesNotContain("account_id")
                 .doesNotContain("passport_id")
@@ -38,7 +44,7 @@ class OperationsMonitoringAssetsTest {
     }
 
     @Test
-    @DisplayName("운영 alert는 dead letter와 manual review와 finalize 거절을 감지한다")
+    @DisplayName("운영 alert는 outbox 실패와 EVM 공급자 장기 장애를 감지한다")
     void coversActionableOutboxFailures() throws IOException {
         String alerts = Files.readString(ALERTS_PATH);
 
@@ -46,6 +52,8 @@ class OperationsMonitoringAssetsTest {
                 .contains("NaesanProofOutboxDeadLetter")
                 .contains("NaesanProofOutboxManualReview")
                 .contains("NaesanProofOutboxFinalizeRejected")
+                .contains("NaesanProofProviderUnavailable")
+                .contains("naesan_proof_provider_available == 0")
                 .contains("severity: critical")
                 .contains("severity: warning")
                 .doesNotContain("account_id")
