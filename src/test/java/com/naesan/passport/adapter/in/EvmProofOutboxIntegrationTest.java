@@ -28,6 +28,7 @@ import com.naesan.passport.application.IssuePassportService;
 import com.naesan.passport.application.ProcessProofOutboxService;
 import com.naesan.passport.application.port.out.ProofAnchorPort;
 import com.naesan.passport.support.AnvilProofChain;
+import com.naesan.passport.support.FaultInjectingJsonRpcProxy;
 
 @Tag("evm")
 @SpringBootTest
@@ -44,9 +45,12 @@ class EvmProofOutboxIntegrationTest {
     private static final AnvilProofChain CHAIN = new AnvilProofChain(
             BigInteger.valueOf(31_337L)
     );
+    private static final FaultInjectingJsonRpcProxy PROXY;
 
     static {
         CHAIN.start();
+        PROXY = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl());
+        PROXY.start();
     }
 
     private final IssuePassportService issuePassportService;
@@ -71,7 +75,7 @@ class EvmProofOutboxIntegrationTest {
     static void configureEvm(DynamicPropertyRegistry registry) {
         registry.add("naesan.proof.provider", () -> "evm");
         registry.add("naesan.proof.worker.enabled", () -> "true");
-        registry.add("naesan.proof.evm.rpc-url", () -> CHAIN.rpcUrl().toString());
+        registry.add("naesan.proof.evm.rpc-url", () -> PROXY.rpcUrl().toString());
         registry.add("naesan.proof.evm.chain-id", () -> CHAIN.chainId().toString());
         registry.add("naesan.proof.evm.contract-address", CHAIN::contractAddress);
         registry.add("naesan.proof.evm.private-key", CHAIN::writerPrivateKey);
@@ -86,11 +90,13 @@ class EvmProofOutboxIntegrationTest {
 
     @AfterAll
     static void stopChain() {
+        PROXY.close();
         CHAIN.close();
     }
 
     @BeforeEach
     void prepareIssuedPassport() {
+        PROXY.forwardRawTransactionResponses();
         jdbcTemplate.update("DELETE FROM outbox_events");
         jdbcTemplate.update("DELETE FROM proof_anchors");
         jdbcTemplate.update("DELETE FROM ownership_history");
@@ -181,5 +187,49 @@ class EvmProofOutboxIntegrationTest {
             assertThat(receipt.externalReference())
                     .isEqualTo(proof.get("transaction_hash"));
         });
+    }
+
+    @Test
+    @DisplayName("전파 후 응답을 잃은 proof는 재제출하지 않고 체인 조회로 확정한다")
+    void reconcilesBroadcastProofAfterResponseLoss() {
+        PROXY.truncateRawTransactionResponses();
+
+        boolean submitted = processProofOutboxService.processNext("evm-worker-submit");
+
+        assertThat(submitted).isTrue();
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT status, error_category, error_code
+                FROM outbox_events
+                """))
+                .containsEntry("status", "RECONCILE_PENDING")
+                .containsEntry("error_category", "AMBIGUOUS")
+                .containsEntry("error_code", "SUBMIT_RESULT_UNKNOWN");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT state FROM proof_anchors",
+                String.class
+        )).isEqualTo("RECONCILE_PENDING");
+        int forwardedAfterUnknownResult = PROXY.forwardedRawTransactionCount();
+
+        PROXY.forwardRawTransactionResponses();
+        boolean reconciled = processProofOutboxService.processNext("evm-worker-reconcile");
+
+        assertThat(reconciled).isTrue();
+        assertThat(PROXY.forwardedRawTransactionCount())
+                .isEqualTo(forwardedAfterUnknownResult);
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT status, attempt_count
+                FROM outbox_events
+                """))
+                .containsEntry("status", "SUCCEEDED")
+                .containsEntry("attempt_count", 2);
+        var proof = jdbcTemplate.queryForMap("""
+                SELECT state, transaction_hash, block_hash, confirmation_count
+                FROM proof_anchors
+                """);
+        assertThat(proof)
+                .containsEntry("state", "CONFIRMED")
+                .containsEntry("confirmation_count", 1);
+        assertThat(proof.get("transaction_hash").toString()).startsWith("0x");
+        assertThat(proof.get("block_hash").toString()).startsWith("0x");
     }
 }

@@ -7,18 +7,30 @@ import java.math.BigInteger;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.List;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.web3j.abi.EventEncoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Event;
+import org.web3j.abi.datatypes.generated.Bytes32;
+import org.web3j.abi.datatypes.generated.Uint64;
 import org.web3j.crypto.Credentials;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.DefaultBlockParameterNumber;
+import org.web3j.protocol.core.methods.request.EthFilter;
+import org.web3j.protocol.http.HttpService;
 
 import com.naesan.passport.application.port.out.ProofAnchorCommand;
 import com.naesan.passport.application.port.out.ProofFailureType;
 import com.naesan.passport.application.port.out.ProofProviderException;
 import com.naesan.passport.support.AnvilProofChain;
+import com.naesan.passport.support.FaultInjectingJsonRpcProxy;
 
 @Tag("evm")
 class EvmProofAnchorAdapterIntegrationTest {
@@ -156,13 +168,84 @@ class EvmProofAnchorAdapterIntegrationTest {
                 });
     }
 
+    @Test
+    @DisplayName("transaction 전파 후 응답이 유실되면 체인 조회로 한 번만 제출된 기준점을 복구한다")
+    void recoversBroadcastTransactionAfterResponseLoss() {
+        String commitment = "1".repeat(64);
+        try (var proxy = new FaultInjectingJsonRpcProxy(CHAIN.rpcUrl())) {
+            proxy.start();
+            proxy.truncateRawTransactionResponses();
+            Web3j proxiedWeb3j = Web3j.build(new HttpService(proxy.rpcUrl().toString()));
+            EvmProofAnchorAdapter adapter = adapter(
+                    proxiedWeb3j,
+                    CHAIN_ID,
+                    CHAIN.contractAddress(),
+                    1
+            );
+            try {
+                assertThatThrownBy(() -> adapter.submit(command(commitment)))
+                        .isInstanceOfSatisfying(ProofProviderException.class, failure -> {
+                            assertThat(failure.failureType())
+                                    .isEqualTo(ProofFailureType.AMBIGUOUS);
+                            assertThat(failure.errorCode())
+                                    .isEqualTo("SUBMIT_RESULT_UNKNOWN");
+                        });
+
+                proxy.forwardRawTransactionResponses();
+                var recovered = adapter.lookup(commitment);
+                int forwardedBeforeDeduplication = proxy.forwardedRawTransactionCount();
+                var deduplicated = adapter.submit(command(commitment));
+
+                assertThat(recovered).isPresent();
+                assertThat(deduplicated.externalReference())
+                        .isEqualTo(recovered.orElseThrow().externalReference());
+                assertThat(proxy.forwardedRawTransactionCount())
+                        .isEqualTo(forwardedBeforeDeduplication);
+                assertThat(anchorEventCount(commitment)).isEqualTo(1);
+            } finally {
+                proxiedWeb3j.shutdown();
+            }
+        }
+    }
+
+    private static int anchorEventCount(String commitment) {
+        Event anchored = new Event(
+                "CommitmentAnchored",
+                List.of(
+                        new TypeReference<Bytes32>(true) { },
+                        new TypeReference<Uint64>() { }
+                )
+        );
+        EthFilter filter = new EthFilter(
+                new DefaultBlockParameterNumber(CHAIN.deploymentBlock()),
+                DefaultBlockParameterName.LATEST,
+                CHAIN.contractAddress()
+        );
+        filter.addSingleTopic(EventEncoder.encode(anchored));
+        filter.addSingleTopic("0x" + commitment);
+        try {
+            return CHAIN.web3j().ethGetLogs(filter).send().getLogs().size();
+        } catch (Exception exception) {
+            throw new IllegalStateException("anchor event를 조회하지 못했습니다.", exception);
+        }
+    }
+
     private static EvmProofAnchorAdapter adapter(
             BigInteger chainId,
             String address,
             int confirmations
     ) {
+        return adapter(CHAIN.web3j(), chainId, address, confirmations);
+    }
+
+    private static EvmProofAnchorAdapter adapter(
+            Web3j web3j,
+            BigInteger chainId,
+            String address,
+            int confirmations
+    ) {
         return new EvmProofAnchorAdapter(
-                CHAIN.web3j(),
+                web3j,
                 CHAIN.writer(),
                 properties(chainId, address, confirmations),
                 Clock.systemUTC()
