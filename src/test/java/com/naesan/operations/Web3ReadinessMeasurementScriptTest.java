@@ -36,7 +36,8 @@ class Web3ReadinessMeasurementScriptTest {
         server.createContext("/ready", exchange -> respond(
                 exchange,
                 503,
-                "{\"status\":\"DOWN\",\"errorCode\":\"SECRET\"}"
+                "{\"status\":\"DOWN\",\"errorCode\":\"SECRET\","
+                        + "\"components\":{\"db\":{\"status\":\"UP\"}}}"
         ));
         server.start();
         Path output = tempDirectory.resolve("outage.ndjson");

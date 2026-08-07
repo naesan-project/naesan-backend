@@ -84,12 +84,12 @@ read_endpoint() {
     --silent \
     --output "$task_body_path" \
     --write-out '%{http_code}' \
-    "$task_base_url$task_endpoint")" || task_http_status="000"
+    "$task_base_url$task_endpoint")" || task_http_status="0"
   case "$task_http_status" in
-    ''|*[!0-9]*) task_http_status="000" ;;
+    ''|*[!0-9]*) task_http_status="0" ;;
   esac
   task_actuator_status="$(sed -n \
-    's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    's/^[[:space:]]*{[[:space:]]*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
     "$task_body_path" | head -n 1)"
   case "$task_actuator_status" in
     UP|DOWN|OUT_OF_SERVICE|UNKNOWN) ;;
