@@ -32,6 +32,8 @@ flowchart LR
 
 도메인별 패키지는 `adapter`–`application`–`domain` 경계를 사용합니다. Controller는 HTTP 계약과 인증 주체 변환을 담당하고, application service는 유스케이스와 트랜잭션을 조정하며, domain 객체는 상태 전이와 불변식을 보유합니다.
 
+테이블 관계와 데이터 수명주기는 [ERD](docs/architecture/ERD.md)에서 확인할 수 있습니다.
+
 ```text
 com.naesan
 ├── account/      # 계정 등록, 인증, 삭제 상태

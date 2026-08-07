@@ -44,6 +44,8 @@ out/
 /docs/*
 !/docs/case-studies/
 !/docs/case-studies/*.md
+!/docs/architecture/
+!/docs/architecture/ERD.md
 /archive/
 /DESIGN.md
 /.omx/
