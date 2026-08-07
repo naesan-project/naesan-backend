@@ -78,6 +78,39 @@ public final class AnvilProofChain implements AutoCloseable {
         }
     }
 
+    public String snapshot() {
+        try {
+            SnapshotResponse response = new Request<>(
+                    "evm_snapshot",
+                    List.of(),
+                    httpService,
+                    SnapshotResponse.class
+            ).send();
+            if (response.hasError() || response.getResult() == null) {
+                throw new IllegalStateException("로컬 EVM snapshot을 만들지 못했습니다.");
+            }
+            return response.getResult();
+        } catch (Exception exception) {
+            throw new IllegalStateException("로컬 EVM snapshot을 만들지 못했습니다.", exception);
+        }
+    }
+
+    public void revert(String snapshotId) {
+        try {
+            RevertResponse response = new Request<>(
+                    "evm_revert",
+                    List.of(snapshotId),
+                    httpService,
+                    RevertResponse.class
+            ).send();
+            if (response.hasError() || !Boolean.TRUE.equals(response.getResult())) {
+                throw new IllegalStateException("로컬 EVM snapshot으로 되돌리지 못했습니다.");
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("로컬 EVM snapshot으로 되돌리지 못했습니다.", exception);
+        }
+    }
+
     public URI rpcUrl() {
         return URI.create(
                 "http://" + container.getHost() + ":" + container.getMappedPort(RPC_PORT)
@@ -172,5 +205,11 @@ public final class AnvilProofChain implements AutoCloseable {
                 master,
                 new int[] {44 | hardened, 60 | hardened, hardened, 0, 0}
         ));
+    }
+
+    public static final class SnapshotResponse extends Response<String> {
+    }
+
+    public static final class RevertResponse extends Response<Boolean> {
     }
 }

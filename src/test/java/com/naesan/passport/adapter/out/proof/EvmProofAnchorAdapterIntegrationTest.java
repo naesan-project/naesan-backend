@@ -405,6 +405,26 @@ class EvmProofAnchorAdapterIntegrationTest {
         }
     }
 
+    @Test
+    @DisplayName("확정 block이 reorg로 사라지면 lookup에서 부재를 확인하고 다시 제출한다")
+    void resubmitsCommitmentAfterConfirmedBlockReorganization() {
+        String commitment = commitment(70_000);
+        String snapshot = CHAIN.snapshot();
+        EvmProofAnchorAdapter adapter = adapter(CHAIN_ID, CHAIN.contractAddress(), 1);
+
+        var initiallyConfirmed = adapter.submit(command(commitment));
+        CHAIN.revert(snapshot);
+
+        assertThat(initiallyConfirmed.confirmed()).isTrue();
+        assertThat(adapter.lookup(commitment)).isEmpty();
+
+        var resubmitted = adapter.submit(command(commitment));
+
+        assertThat(resubmitted.confirmed()).isTrue();
+        assertThat(adapter.lookup(commitment)).isPresent();
+        assertThat(anchorEventCount(commitment)).isEqualTo(1);
+    }
+
     private static SubmissionResult submit(
             EvmProofAnchorAdapter adapter,
             String commitment
